@@ -3,6 +3,8 @@ import ./chunk, ./value
 when defined(DEBUG_TRACE_EXECUTION):
   import ./debug
 
+import ./private/pointer_arithmetics
+
 const STACK_MAX = 256
 
 type
@@ -30,15 +32,15 @@ proc freeVM*() =
 
 proc push(value: Value) =
   vm.stackTop[] = value
-  vm.stackTop = cast[ptr Value](cast[uint](vm.stackTop) + sizeof(Value).uint)
+  vm.stackTop += 1
 
 proc pop(): Value =
-  vm.stackTop = cast[ptr Value](cast[uint](vm.stackTop) - sizeof(Value).uint)
+  vm.stackTop -= 1
   return vm.stackTop[]
 
 template readByte(): uint8 =
   let tmp = vm.ip[]
-  vm.ip = cast[ptr uint8](cast[uint](vm.ip) + 1)
+  vm.ip += 1
   tmp
 
 template readConstant(): Value =
@@ -56,14 +58,14 @@ proc run(): InterpretResult =
     when defined(DEBUG_TRACE_EXECUTION):
       write(stdout, "          ")
 
-      for slot in countup(cast[uint](addr vm.stack[0]), cast[uint](vm.stackTop) - sizeof(Value).uint, sizeof(Value).uint):
+      for slot in cast[ptr Value](addr vm.stack[0]) ..< vm.stackTop:
         write(stdout, "[ ")
-        printValue(cast[ptr Value](slot)[])
+        printValue(slot[])
         write(stdout, " ]")
 
       write(stdout, '\n')
 
-      discard disassembleInstruction(vm.chunk, cast[int32](vm.ip) - cast[int32](vm.chunk.code))
+      discard disassembleInstruction(vm.chunk, int32(vm.ip - vm.chunk.code))
 
     let instruction = readByte()
 
