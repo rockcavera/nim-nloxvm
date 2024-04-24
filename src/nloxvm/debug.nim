@@ -31,6 +31,16 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
   case instruction
   of uint8(OP_CONSTANT):
     return constantInstruction("OP_CONSTANT", chunk, offset)
+  of uint8(OP_ADD):
+    return simpleInstruction("OP_ADD", offset)
+  of uint8(OP_SUBTRACT):
+    return simpleInstruction("OP_SUBTRACT", offset)
+  of uint8(OP_MULTIPLY):
+    return simpleInstruction("OP_MULTIPLY", offset)
+  of uint8(OP_DIVIDE):
+    return simpleInstruction("OP_DIVIDE", offset)
+  of uint8(OP_NEGATE):
+    return simpleInstruction("OP_NEGATE", offset)
   of uint8(OP_RETURN):
     return simpleInstruction("OP_RETURN", offset)
   else:
