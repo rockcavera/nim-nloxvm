@@ -1,4 +1,4 @@
-import ./chunk, ./value
+import ./chunk, ./compiler, ./value
 
 when defined(DEBUG_TRACE_EXECUTION):
   import ./debug
@@ -92,8 +92,7 @@ proc run(): InterpretResult =
     else:
       discard
 
-proc interpret*(chunk: var Chunk): InterpretResult =
-  vm.chunk = chunk
-  vm.ip = cast[ptr uint8](vm.chunk.code)
+proc interpret*(source: var string): InterpretResult =
+  compile(source)
 
-  return run()
+  return INTERPRET_OK

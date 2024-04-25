@@ -1,38 +1,49 @@
-import ./chunk, ./debug, ./vm
+import std/[cmdline, exitprocs, strformat]
 
-proc main*(argc: int, argv: openArray[string]): int =
+import ./vm
+
+proc repl() =
+  var line = newString(1024)
+
+  while true:
+    write(stdout, "> ")
+
+    let readed = readBuffer(stdin, cstring(line), len(line))
+
+    if readed == 0:
+      write(stdout, '\n')
+      break
+
+    discard interpret(line)
+
+proc runFile(path: string) =
+  var source: string
+
+  try:
+    source = readFile(path)
+  except IOError:
+    write(stderr, fmt"""Could not open file "{path}".{'\n'}""")
+    quit(74)
+
+  let result = interpret(source)
+
+  if result == INTERPRET_COMPILE_ERROR:
+    quit(65)
+
+  if result == INTERPRET_RUNTIME_ERROR:
+    quit(65)
+
+proc main*() =
   initVM()
 
-  var chunk: Chunk
-
-  initChunk(chunk)
-
-  var constant = addConstant(chunk, 1.2)
-  writeChunk(chunk, OP_CONSTANT, 123)
-  writeChunk(chunk, constant, 123)
-
-  constant = addConstant(chunk, 3.4)
-  writeChunk(chunk, OP_CONSTANT, 123)
-  writeChunk(chunk, constant, 123)
-
-  writeChunk(chunk, OP_ADD, 123)
-
-  constant = addConstant(chunk, 5.6)
-  writeChunk(chunk, OP_CONSTANT, 123)
-  writeChunk(chunk, constant, 123)
-
-  writeChunk(chunk, OP_DIVIDE, 123)
-
-  writeChunk(chunk, OP_NEGATE, 123)
-
-  writeChunk(chunk, OP_RETURN, 123)
-
-  disassembleChunk(chunk, "test chunk")
-
-  discard interpret(chunk)
+  if paramCount() == 0:
+    repl()
+  elif paramCount() == 1:
+    runFile(paramStr(1))
+  else:
+    write(stderr, "Usage: nloxvm [path]\n")
+    quit(64)
 
   freeVM()
 
-  freeChunk(chunk)
-
-  return 0
+  setProgramResult(0)
