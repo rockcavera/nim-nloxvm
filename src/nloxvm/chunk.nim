@@ -1,5 +1,7 @@
 import ./memory, ./value
 
+import ./private/pointer_arithmetics
+
 type
   OpCode* {.size: 1.} = enum
     OP_CONSTANT,
@@ -13,8 +15,8 @@ type
   Chunk* = object
     count*: int32
     capacity: int32
-    code*: ptr UncheckedArray[uint8]
-    lines*: ptr UncheckedArray[int32]
+    code*: ptr uint8
+    lines*: ptr int32
     constants*: ValueArray
 
 proc initChunk*(chunk: var Chunk) =

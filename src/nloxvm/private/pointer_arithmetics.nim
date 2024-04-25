@@ -43,3 +43,9 @@ template `-`*[T](a, b: ptr T): int =
 
 template `-`*(a, b: pointer): int =
   cast[int](cast[uint](a) - cast[uint](b))
+
+template `[]`*[T](p: ptr T, index: SomeInteger): T =
+  (p + index)[]
+
+template `[]=`*[T](p: ptr T, index: SomeInteger, value: T) =
+  (p + index)[] = value

@@ -2,13 +2,15 @@ import std/strformat
 
 import ./memory
 
+import ./private/pointer_arithmetics
+
 type
   Value* = float
 
   ValueArray* = object
     capacity: int32
     count*: int32
-    values*: ptr UncheckedArray[Value]
+    values*: ptr Value
 
 proc initValueArray*(`array`: var ValueArray) =
   `array`.values = nil
