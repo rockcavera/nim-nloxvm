@@ -2,15 +2,15 @@ import std/[cmdline, exitprocs, strformat]
 
 import ./vm
 
+proc c_fgets(str: cstring, num: cint, stream: File): cstring {.importc: "fgets", header: "<stdio.h>".}
+
 proc repl() =
   var line = newString(1024)
 
   while true:
     write(stdout, "> ")
 
-    let readed = readBuffer(stdin, cstring(line), len(line))
-
-    if readed == 0:
+    if isNil(c_fgets(cstring(line), len(line).cint, stdin)):
       write(stdout, '\n')
       break
 
