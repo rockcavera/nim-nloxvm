@@ -36,10 +36,8 @@ var
   parser: Parser
   compilingChunk: ptr Chunk
 
-proc lexeme(token: var Token): string =
-  result = newString(token.length)
-
-  copyMem(cstring(result), token.start, token.length)
+template lexeme(token: Token): openArray[char] =
+  toOpenArray(cast[cstring](token.start), 0, token.length - 1)
 
 proc currentChunk(): var Chunk =
   compilingChunk[]
@@ -67,7 +65,7 @@ proc error(message: ptr char) =
   errorAt(parser.previous, message)
 
 proc error(message: string) =
-  errorAt(parser.previous, cast[ptr char](addr message))
+  errorAt(parser.previous, cast[ptr char](addr message[0]))
 
 proc errorAtCurrent(message: ptr char) =
   errorAt(parser.current, message)

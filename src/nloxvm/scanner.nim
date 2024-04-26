@@ -86,7 +86,7 @@ proc peekNext(): char =
   if isAtEnd():
     return '\0'
 
-  (scanner.current + 1)[]
+  scanner.current[1]
 
 proc match(expected: char): bool =
   if isAtEnd():
@@ -146,7 +146,7 @@ proc identifierType(): TokenType =
     return checkKeyword(1, 3, "lse", TOKEN_ELSE)
   of 'f':
     if scanner.current - scanner.start > 1:
-      case (scanner.start + 1)[]
+      case scanner.start[1]
       of 'a':
         return checkKeyword(2, 3, "lse", TOKEN_FALSE)
       of 'o':
@@ -169,7 +169,7 @@ proc identifierType(): TokenType =
     return checkKeyword(1, 4, "uper", TOKEN_SUPER)
   of 't':
     if scanner.current - scanner.start > 1:
-      case (scanner.start + 1)[]
+      case scanner.start[1]
       of 'h':
         return checkKeyword(2, 2, "is", TOKEN_THIS)
       of 'r':
