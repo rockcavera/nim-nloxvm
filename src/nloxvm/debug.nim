@@ -2,6 +2,8 @@ import std/strformat
 
 import ./chunk, ./value
 
+import ./private/pointer_arithmetics
+
 proc simpleInstruction(name: string, offset: int32): int32 =
   write(stdout, fmt"{name}{'\n'}")
 

@@ -9,7 +9,7 @@ const STACK_MAX = 256
 
 type
   VM = object
-    chunk: Chunk
+    chunk: ptr Chunk
     ip: ptr uint8
     stack: array[STACK_MAX, Value]
     stackTop: ptr Value
@@ -65,7 +65,7 @@ proc run(): InterpretResult =
 
       write(stdout, '\n')
 
-      discard disassembleInstruction(vm.chunk, int32(vm.ip - vm.chunk.code))
+      discard disassembleInstruction(vm.chunk[], int32(vm.ip - vm.chunk.code))
 
     let instruction = readByte()
 
@@ -73,8 +73,6 @@ proc run(): InterpretResult =
     of uint8(OP_CONSTANT):
       let constant = readConstant()
       push(constant)
-      printValue(constant)
-      write(stdout, '\n')
     of uint8(OP_NEGATE):
       push(-pop())
     of uint8(OP_ADD):
@@ -93,6 +91,17 @@ proc run(): InterpretResult =
       discard
 
 proc interpret*(source: var string): InterpretResult =
-  compile(source)
+  var chunk: Chunk
 
-  return INTERPRET_OK
+  initChunk(chunk)
+
+  if not compile(source, chunk):
+    freeChunk(chunk)
+    return INTERPRET_COMPILE_ERROR
+
+  vm.chunk = addr chunk
+  vm.ip = vm.chunk.code
+
+  result = run()
+
+  freeChunk(chunk)

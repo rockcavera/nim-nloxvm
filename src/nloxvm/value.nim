@@ -32,4 +32,4 @@ proc freeValueArray*(`array`: var ValueArray) =
   initValueArray(`array`)
 
 proc printValue*(value: Value) =
-  write(stdout, fmt"{value:.2}")
+  write(stdout, fmt"{value:g}")
