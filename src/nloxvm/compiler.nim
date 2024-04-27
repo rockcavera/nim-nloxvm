@@ -140,6 +140,18 @@ proc binary() =
   parsePrecedence(Precedence(ord(rule.precedence) + 1))
 
   case operatorType
+  of TOKEN_BANG_EQUAL:
+    emitBytes(OP_EQUAL, OP_NOT)
+  of TOKEN_EQUAL_EQUAL:
+    emitByte(OP_EQUAL)
+  of TOKEN_GREATER:
+    emitByte(OP_GREATER)
+  of TOKEN_GREATER_EQUAL:
+    emitBytes(OP_LESS, OP_NOT)
+  of TOKEN_LESS:
+    emitByte(OP_LESS)
+  of TOKEN_LESS_EQUAL:
+    emitBytes(OP_GREATER, OP_NOT)
   of TOKEN_PLUS:
     emitByte(OP_ADD)
   of TOKEN_MINUS:
@@ -148,6 +160,17 @@ proc binary() =
     emitByte(OP_MULTIPLY)
   of TOKEN_SLASH:
     emitByte(OP_DIVIDE)
+  else:
+    discard
+
+proc literal() =
+  case parser.previous.`type`
+  of TOKEN_FALSE:
+    emitByte(OP_FALSE)
+  of TOKEN_NIL:
+    emitByte(OP_NIL)
+  of TOKEN_TRUE:
+    emitByte(OP_TRUE)
   else:
     discard
 
@@ -161,7 +184,7 @@ proc number() =
 
   discard parseFloat(lexeme(parser.previous), value)
 
-  emitConstant(value)
+  emitConstant(numberVal(value))
 
 proc unary() =
   let operatorType = parser.previous.`type`
@@ -169,6 +192,8 @@ proc unary() =
   parsePrecedence(PREC_UNARY)
 
   case operatorType
+  of TOKEN_BANG:
+    emitByte(OP_NOT)
   of TOKEN_MINUS:
     emitByte(OP_NEGATE)
   else:
@@ -186,31 +211,31 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_SEMICOLON
   ParseRule(prefix: nil, infix: binary, precedence: PREC_FACTOR), # TOKEN_SLASH
   ParseRule(prefix: nil, infix: binary, precedence: PREC_FACTOR), # TOKEN_STAR
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_BANG
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_BANG_EQUAL
+  ParseRule(prefix: unary, infix: nil, precedence: PREC_NONE),    # TOKEN_BANG
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_EQUALITY), # TOKEN_BANG_EQUAL
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_EQUAL
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_EQUAL_EQUAL
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_GREATER
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_GREATER_EQUAL
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_LESS
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_LESS_EQUAL
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_EQUALITY),      # TOKEN_EQUAL_EQUAL
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_GREATER
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_GREATER_EQUAL
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_LESS
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_LESS_EQUAL
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_IDENTIFIER
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_STRING
   ParseRule(prefix: number, infix: nil, precedence: PREC_NONE),   # TOKEN_NUMBER
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_AND
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_CLASS
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_ELSE
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_FALSE
+  ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_FALSE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_FOR
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_FUN
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_IF
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_NIL
+  ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_NIL
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_OR
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_PRINT
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RETURN
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_SUPER
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_THIS
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_TRUE
+  ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_TRUE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_VAR
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_WHILE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_ERROR

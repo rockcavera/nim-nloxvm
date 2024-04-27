@@ -1,3 +1,5 @@
+import std/strutils
+
 import ./chunk, ./compiler, ./value
 
 when defined(DEBUG_TRACE_EXECUTION):
@@ -24,6 +26,20 @@ var vm: VM
 proc resetStack() =
   vm.stackTop = cast[ptr Value](addr vm.stack[0])
 
+proc runtimeError(format: string, args: varargs[string, `$`]) =
+  if len(args) > 0:
+    write(stderr, format % args, "\n")
+  else:
+    write(stderr, format, "\n")
+
+  let
+    instruction = vm.ip - vm.chunk.code - 1
+    line = vm.chunk.lines[instruction]
+
+  write(stderr, "[line $1] in script\n" % $line)
+
+  resetStack()
+
 proc initVM*() =
   resetStack()
 
@@ -38,6 +54,12 @@ proc pop(): Value =
   vm.stackTop -= 1
   return vm.stackTop[]
 
+proc peek(distance: int32): Value =
+  vm.stackTop[-1 - distance]
+
+proc isFalsey(value: Value): bool =
+  isNil(value) or (isBool(value) and not(asBool(value)))
+
 template readByte(): uint8 =
   let tmp = vm.ip[]
   vm.ip += 1
@@ -46,12 +68,16 @@ template readByte(): uint8 =
 template readConstant(): Value =
   vm.chunk.constants.values[readByte()]
 
-template binaryOp(op: untyped) =
-  let
-    b = pop()
-    a = pop()
+template binaryOp(valueType: untyped, op: untyped) =
+  if not(isNumber(peek(0))) or not(isNumber(peek(1))):
+    runtimeError("Operands must be numbers.")
+    return INTERPRET_RUNTIME_ERROR
 
-  push(op(a, b))
+  let
+    b = asNumber(pop())
+    a = asNumber(pop())
+
+  push(valueType(op(a, b)))
 
 proc run(): InterpretResult =
   while true:
@@ -73,16 +99,38 @@ proc run(): InterpretResult =
     of uint8(OP_CONSTANT):
       let constant = readConstant()
       push(constant)
+    of uint8(OP_NIL):
+      push(nilVal())
+    of uint8(OP_TRUE):
+      push(boolVal(true))
+    of uint8(OP_FALSE):
+      push(boolVal(false))
+    of uint8(OP_EQUAL):
+      let
+        b = pop()
+        a = pop()
+
+      push(boolVal(valuesEqual(a, b)))
+    of uint8(OP_GREATER):
+      binaryOp(boolVal, `>`)
+    of uint8(OP_LESS):
+      binaryOp(boolVal, `<`)
     of uint8(OP_NEGATE):
-      push(-pop())
+      if not isNumber(peek(0)):
+        runtimeError("Operand must be a number.")
+        return INTERPRET_RUNTIME_ERROR
+
+      push(numberVal(-asNumber(pop())))
     of uint8(OP_ADD):
-      binaryOp(`+`)
+      binaryOp(numberVal, `+`)
     of uint8(OP_SUBTRACT):
-      binaryOp(`-`)
+      binaryOp(numberVal, `-`)
     of uint8(OP_MULTIPLY):
-      binaryOp(`*`)
+      binaryOp(numberVal, `*`)
     of uint8(OP_DIVIDE):
-      binaryOp(`/`)
+      binaryOp(numberVal, `/`)
+    of uint8(OP_NOT):
+      push(boolVal(isFalsey(pop())))
     of uint8(OP_RETURN):
       printValue(pop())
       write(stdout, '\n')
