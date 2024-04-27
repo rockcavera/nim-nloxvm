@@ -1,6 +1,6 @@
 import system/ansi_c
 
-import ./object, ./vm
+import ./globals, ./types
 
 template allocate*[T](`type`: typedesc[T], count: untyped): ptr T =
   cast[ptr T](reallocate(nil, 0, sizeof(`type`) * count))

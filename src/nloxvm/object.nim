@@ -1,22 +1,9 @@
-import ./memory, ./value, ./vm
+import ./globals, ./memory, ./value, ./types
 
 import ./private/pointer_arithmetics
 
-type
-  ObjType = enum
-    OBJT_STRING
-
-  Obj = object
-    `type`: ObjType
-    next: ptr Obj
-
-  ObjString = object
-    obj: Obj
-    length*: int32
-    chars*: ptr char
-
 template objType(value: Value): ObjType =
-  cast[ptr Obj](asObj(value)).`type`
+  asObj(value).`type`
 
 template isString*(value: Value): bool =
   isObjType(value, OBJT_STRING)
@@ -28,7 +15,7 @@ template asCString(value: Value): ptr char =
   cast[ptr ObjString](asObj(value)).chars
 
 proc isObjType*(value: Value, `type`: ObjType): bool =
-  isObj(value) and cast[ptr Obj](asObj(value)).`type` == `type`
+  isObj(value) and asObj(value).`type` == `type`
 
 template allocate_obj[T](`type`: typedesc[T], objectType: ObjType): ptr T =
   cast[ptr T](allocateObject(sizeof(`type`), objectType))

@@ -1,6 +1,6 @@
 import std/[cmdline, exitprocs, strformat]
 
-import ./vm
+import ./vm_impl, ./types
 
 proc c_fgets(str: cstring, num: cint, stream: File): cstring {.importc: "fgets", header: "<stdio.h>".}
 
