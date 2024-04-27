@@ -1,6 +1,6 @@
 import std/strutils
 
-import ./chunk, ./compiler, ./value
+import ./chunk, ./compiler, ./memory, ./object, ./value
 
 when defined(DEBUG_TRACE_EXECUTION):
   import ./debug
@@ -15,13 +15,14 @@ type
     ip: ptr uint8
     stack: array[STACK_MAX, Value]
     stackTop: ptr Value
+    objects*: ptr Obj
 
   InterpretResult* = enum
     INTERPRET_OK,
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR
 
-var vm: VM
+var vm*: VM
 
 proc resetStack() =
   vm.stackTop = cast[ptr Value](addr vm.stack[0])
@@ -43,8 +44,10 @@ proc runtimeError(format: string, args: varargs[string, `$`]) =
 proc initVM*() =
   resetStack()
 
+  vm.objects = nil
+
 proc freeVM*() =
-  discard
+  freeObjects()
 
 proc push(value: Value) =
   vm.stackTop[] = value
@@ -59,6 +62,22 @@ proc peek(distance: int32): Value =
 
 proc isFalsey(value: Value): bool =
   isNil(value) or (isBool(value) and not(asBool(value)))
+
+proc concatenate() =
+  let
+    b = asString(pop())
+    a = asString(pop())
+    length = a.length + b.length
+    chars = allocate(char, length + 1)
+
+  copyMem(chars, a.chars, a.length)
+  copyMem(chars + a.length, b.chars, b.length)
+
+  chars[length] = '\0'
+
+  var result = takeString(chars, length)
+
+  push(objVal(cast[ptr Obj](result)))
 
 template readByte(): uint8 =
   let tmp = vm.ip[]
@@ -122,7 +141,17 @@ proc run(): InterpretResult =
 
       push(numberVal(-asNumber(pop())))
     of uint8(OP_ADD):
-      binaryOp(numberVal, `+`)
+      if isString(peek(0)) and isString(peek(1)):
+        concatenate()
+      elif isNumber(peek(0)) and isNumber(peek(1)):
+        let
+          b = asNumber(pop())
+          a = asNumber(pop())
+
+        push(numberVal(a + b))
+      else:
+        runtimeError("Operands must be two numbers or two strings.")
+        return INTERPRET_RUNTIME_ERROR
     of uint8(OP_SUBTRACT):
       binaryOp(numberVal, `-`)
     of uint8(OP_MULTIPLY):

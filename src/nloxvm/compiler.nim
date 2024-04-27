@@ -1,9 +1,11 @@
 import std/[parseutils, strformat]
 
-import ./chunk, ./scanner, ./value
+import ./chunk, ./object, ./scanner, ./value
 
 when defined(DEBUG_PRINT_CODE):
   import ./debug
+
+import ./private/pointer_arithmetics
 
 type
   Parser = object
@@ -186,6 +188,9 @@ proc number() =
 
   emitConstant(numberVal(value))
 
+proc string() =
+  emitConstant(objVal(cast[ptr Obj](copyString(parser.previous.start + 1, parser.previous.length - 2))))
+
 proc unary() =
   let operatorType = parser.previous.`type`
 
@@ -214,13 +219,13 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: unary, infix: nil, precedence: PREC_NONE),    # TOKEN_BANG
   ParseRule(prefix: nil, infix: binary, precedence: PREC_EQUALITY), # TOKEN_BANG_EQUAL
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_EQUAL
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_EQUALITY),      # TOKEN_EQUAL_EQUAL
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_GREATER
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_GREATER_EQUAL
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_LESS
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON),      # TOKEN_LESS_EQUAL
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_EQUALITY), # TOKEN_EQUAL_EQUAL
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_GREATER
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_GREATER_EQUAL
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_LESS
+  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_LESS_EQUAL
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_IDENTIFIER
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_STRING
+  ParseRule(prefix: string, infix: nil, precedence: PREC_NONE),      # TOKEN_STRING
   ParseRule(prefix: number, infix: nil, precedence: PREC_NONE),   # TOKEN_NUMBER
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_AND
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_CLASS

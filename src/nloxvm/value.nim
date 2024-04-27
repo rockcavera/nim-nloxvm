@@ -5,10 +5,14 @@ import ./memory
 import ./private/pointer_arithmetics
 
 type
+  Obj* = object
+  ObjString = object
+
   ValueType = enum
     VAL_BOOL,
     VAL_NIL,
-    VAL_NUMBER
+    VAL_NUMBER,
+    VAL_OBJ
 
   Value* = object
     case `type`: ValueType
@@ -16,6 +20,8 @@ type
       boolean: bool
     of VAL_NIL, VAL_NUMBER:
       number: float
+    of VAL_OBJ:
+      obj: ptr Obj
 
   ValueArray* = object
     capacity: int32
@@ -31,6 +37,12 @@ template isNil*(value: Value): bool =
 template isNumber*(value: Value): bool =
   value.`type` == VAL_NUMBER
 
+template isObj*(value: Value): bool =
+  value.`type` == VAL_OBJ
+
+template asObj*(value: Value): ptr Obj =
+  value.obj
+
 template asBool*(value: Value): bool =
   value.boolean
 
@@ -45,6 +57,9 @@ template nilVal*(): Value =
 
 template numberVal*(value: float): Value =
   Value(`type`: VAL_NUMBER, number: value)
+
+template objVal*(`object`: ptr Obj): Value =
+  Value(`type`: VAL_OBJ, obj: `object`)
 
 proc initValueArray*(`array`: var ValueArray) =
   `array`.values = nil
@@ -65,6 +80,8 @@ proc freeValueArray*(`array`: var ValueArray) =
   free_array(Value, `array`.values, `array`.capacity)
   initValueArray(`array`)
 
+import ./object
+
 proc printValue*(value: Value) =
   case value.`type`
   of VAL_BOOL:
@@ -73,6 +90,8 @@ proc printValue*(value: Value) =
     write(stdout, "nil")
   of VAL_NUMBER:
     write(stdout, fmt"{asNumber(value):g}")
+  of VAL_OBJ:
+    printObject(value)
 
 proc valuesEqual*(a: Value, b: Value): bool =
   if a.`type` != b.`type`:
@@ -85,3 +104,9 @@ proc valuesEqual*(a: Value, b: Value): bool =
     return true
   of VAL_NUMBER:
     return asNumber(a) == asNumber(b)
+  of VAL_OBJ:
+    let
+      aString = asString(a)
+      bString = asString(b)
+
+    return aString.length == bString.length and cmpMem(aString.chars, bString.chars, aString.length) == 0
