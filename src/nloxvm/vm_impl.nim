@@ -1,6 +1,6 @@
 import std/strutils
 
-import ./chunk, ./compiler, ./globals, ./memory, ./object, ./value, ./types
+import ./chunk, ./compiler, ./globals, ./memory, ./object, ./table, ./types, ./value
 
 when defined(DEBUG_TRACE_EXECUTION):
   import ./debug
@@ -29,7 +29,11 @@ proc initVM*() =
 
   vm.objects = nil
 
+  initTable(vm.strings)
+
 proc freeVM*() =
+  freeTable(vm.strings)
+
   freeObjects()
 
 proc push(value: Value) =

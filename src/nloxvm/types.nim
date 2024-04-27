@@ -71,6 +71,7 @@ type
     obj*: Obj
     length*: int32
     chars*: ptr char
+    hash*: uint32
 
   # end
 
@@ -167,11 +168,25 @@ type
     ip*: ptr uint8
     stack*: array[STACK_MAX, Value]
     stackTop*: ptr Value
+    strings*: Table
     objects*: ptr Obj
 
   InterpretResult* = enum
     INTERPRET_OK,
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR
+
+  # end
+
+  # table.nim
+
+  Entry* = object
+    key*: ptr ObjString
+    value*: Value
+
+  Table* = object
+    count*: int32
+    capacity*: int32
+    entries*: ptr Entry
 
   # end

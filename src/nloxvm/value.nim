@@ -81,8 +81,4 @@ proc valuesEqual*(a: Value, b: Value): bool =
   of VAL_NUMBER:
     return asNumber(a) == asNumber(b)
   of VAL_OBJ:
-    let
-      aString = asString(a)
-      bString = asString(b)
-
-    return aString.length == bString.length and cmpMem(aString.chars, bString.chars, aString.length) == 0
+    asObj(a) == asObj(b)
