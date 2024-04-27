@@ -1,38 +1,11 @@
 import std/[parseutils, strformat]
 
-import ./chunk, ./object, ./scanner, ./value
+import ./chunk, ./object, ./scanner, ./value, ./types
 
 when defined(DEBUG_PRINT_CODE):
   import ./debug
 
 import ./private/pointer_arithmetics
-
-type
-  Parser = object
-    current: Token
-    previous: Token
-    hadError: bool
-    panicMode: bool
-
-  Precedence = enum
-    PREC_NONE,
-    PREC_ASSIGNMENT,  # =
-    PREC_OR,          # or
-    PREC_AND,         # and
-    PREC_EQUALITY,    # == !=
-    PREC_COMPARISON,  # < > <= >=
-    PREC_TERM,        # + -
-    PREC_FACTOR,      # * /
-    PREC_UNARY,       # ! -
-    PREC_CALL,        # . ()
-    PREC_PRIMARY
-
-  ParseFn = proc() {.nimcall.}
-
-  ParseRule = object
-    prefix: ParseFn
-    infix: ParseFn
-    precedence: Precedence
 
 var
   parser: Parser

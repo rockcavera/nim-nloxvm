@@ -1,6 +1,6 @@
 import std/strformat
 
-import ./chunk, ./value
+import ./value, ./types
 
 import ./private/pointer_arithmetics
 

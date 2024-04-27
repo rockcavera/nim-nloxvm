@@ -1,6 +1,6 @@
 import system/ansi_c
 
-import ./object, ./vm
+import ./globals, ./types
 
 template allocate*[T](`type`: typedesc[T], count: untyped): ptr T =
   cast[ptr T](reallocate(nil, 0, sizeof(`type`) * count))
@@ -31,7 +31,7 @@ proc reallocate*(`pointer`: pointer, oldSize: int, newSize: int): pointer =
 proc freeObject(`object`: ptr Obj) =
   case `object`.`type`
   of OBJT_STRING:
-    let string = cast[ptr ObjectString](`object`)
+    let string = cast[ptr ObjString](`object`)
 
     free_array(char, string.chars, string.length + 1)
 

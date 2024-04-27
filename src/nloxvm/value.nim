@@ -1,32 +1,8 @@
 import std/strformat
 
-import ./memory
+import ./memory, ./types
 
 import ./private/pointer_arithmetics
-
-type
-  Obj* = object
-  ObjString = object
-
-  ValueType = enum
-    VAL_BOOL,
-    VAL_NIL,
-    VAL_NUMBER,
-    VAL_OBJ
-
-  Value* = object
-    case `type`: ValueType
-    of VAL_BOOL:
-      boolean: bool
-    of VAL_NIL, VAL_NUMBER:
-      number: float
-    of VAL_OBJ:
-      obj: ptr Obj
-
-  ValueArray* = object
-    capacity: int32
-    count*: int32
-    values*: ptr Value
 
 template isBool*(value: Value): bool =
   value.`type` == VAL_BOOL

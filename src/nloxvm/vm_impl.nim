@@ -1,28 +1,11 @@
 import std/strutils
 
-import ./chunk, ./compiler, ./memory, ./object, ./value
+import ./chunk, ./compiler, ./globals, ./memory, ./object, ./value, ./types
 
 when defined(DEBUG_TRACE_EXECUTION):
   import ./debug
 
 import ./private/pointer_arithmetics
-
-const STACK_MAX = 256
-
-type
-  VM = object
-    chunk: ptr Chunk
-    ip: ptr uint8
-    stack: array[STACK_MAX, Value]
-    stackTop: ptr Value
-    objects*: ptr Obj
-
-  InterpretResult* = enum
-    INTERPRET_OK,
-    INTERPRET_COMPILE_ERROR,
-    INTERPRET_RUNTIME_ERROR
-
-var vm*: VM
 
 proc resetStack() =
   vm.stackTop = cast[ptr Value](addr vm.stack[0])
