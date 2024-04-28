@@ -39,6 +39,14 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return simpleInstruction("OP_TRUE", offset)
   of uint8(OP_FALSE):
     return simpleInstruction("OP_FALSE", offset)
+  of uint8(OP_POP):
+    return simpleInstruction("OP_POP", offset)
+  of uint8(OP_GET_GLOBAL):
+    return constantInstruction("OP_GET_GLOBAL", chunk, offset)
+  of uint8(OP_DEFINE_GLOBAL):
+    return constantInstruction("OP_DEFINE_GLOBAL", chunk, offset)
+  of uint8(OP_SET_GLOBAL):
+    return constantInstruction("OP_SET_GLOBAL", chunk, offset)
   of uint8(OP_EQUAL):
     return simpleInstruction("OP_EQUAL", offset)
   of uint8(OP_GREATER):
@@ -57,6 +65,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return simpleInstruction("OP_NOT", offset)
   of uint8(OP_NEGATE):
     return simpleInstruction("OP_NEGATE", offset)
+  of uint8(OP_PRINT):
+    return simpleInstruction("OP_PRINT", offset)
   of uint8(OP_RETURN):
     return simpleInstruction("OP_RETURN", offset)
   else:

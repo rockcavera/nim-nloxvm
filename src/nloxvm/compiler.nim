@@ -63,6 +63,17 @@ proc consume(`type`: TokenType, message: string) =
 
   errorAtCurrent(cast[ptr char](addr message[0]))
 
+proc check(`type`: TokenType): bool =
+  parser.current.`type` == `type`
+
+proc match(`type`: TokenType): bool =
+  if not check(`type`):
+    return false
+
+  advance()
+
+  true
+
 proc emitByte(`byte`: uint8) =
   writeChunk(currentChunk(), `byte`, parser.previous.line)
 
@@ -104,10 +115,12 @@ proc endCompiler() =
       disassembleChunk(currentChunk(), "code")
 
 proc expression()
+proc statement()
+proc declaration()
 proc getRule(`type`: TokenType): ptr ParseRule
 proc parsePrecedence(precedence: Precedence)
 
-proc binary() =
+proc binary(canAssign: bool) =
   let
     operatorType = parser.previous.`type`
     rule = getRule(operatorType)
@@ -138,7 +151,7 @@ proc binary() =
   else:
     discard
 
-proc literal() =
+proc literal(canAssign: bool) =
   case parser.previous.`type`
   of TOKEN_FALSE:
     emitByte(OP_FALSE)
@@ -149,22 +162,37 @@ proc literal() =
   else:
     discard
 
-proc grouping() =
+proc grouping(canAssign: bool) =
   expression()
 
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.")
 
-proc number() =
+proc number(canAssign: bool) =
   var value: float
 
   discard parseFloat(lexeme(parser.previous), value)
 
   emitConstant(numberVal(value))
 
-proc string() =
+proc string(canAssign: bool) =
   emitConstant(objVal(cast[ptr Obj](copyString(parser.previous.start + 1, parser.previous.length - 2))))
 
-proc unary() =
+proc identifierConstant(name: Token): uint8
+
+proc namedVariable(name: Token, canAssign: bool) =
+  let arg = identifierConstant(name)
+
+  if canAssign and match(TOKEN_EQUAL):
+    expression()
+
+    emitBytes(OP_SET_GLOBAL, arg)
+  else:
+    emitBytes(OP_GET_GLOBAL, arg)
+
+proc variable(canAssign: bool) =
+  namedVariable(parser.previous, canAssign)
+
+proc unary(canAssign: bool) =
   let operatorType = parser.previous.`type`
 
   parsePrecedence(PREC_UNARY)
@@ -197,7 +225,7 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_GREATER_EQUAL
   ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_LESS
   ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_LESS_EQUAL
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_IDENTIFIER
+  ParseRule(prefix: variable, infix: nil, precedence: PREC_NONE),      # TOKEN_IDENTIFIER
   ParseRule(prefix: string, infix: nil, precedence: PREC_NONE),      # TOKEN_STRING
   ParseRule(prefix: number, infix: nil, precedence: PREC_NONE),   # TOKEN_NUMBER
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_AND
@@ -229,20 +257,92 @@ proc parsePrecedence(precedence: Precedence) =
     error("Expect expression.")
     return
 
-  prefixRule()
+  let canAssign = precedence <= PREC_ASSIGNMENT
+
+  prefixRule(canAssign)
 
   while precedence <= getRule(parser.current.`type`).precedence:
     advance()
 
     let infixRule = getRule(parser.previous.`type`).infix
 
-    infixRule()
+    infixRule(canAssign)
+
+    if canAssign and match(TOKEN_EQUAL):
+      error("Invalid assignment target.")
+
+proc identifierConstant(name: Token): uint8 =
+  makeConstant(objVal(cast[ptr Obj](copyString(name.start, name.length))))
+
+proc parseVariable(errorMessage: string): uint8 =
+  consume(TOKEN_IDENTIFIER, errorMessage)
+
+  identifierConstant(parser.previous)
+
+proc defineVariable(global: uint8) =
+  emitBytes(OP_DEFINE_GLOBAL, global)
 
 proc getRule(`type`: TokenType): ptr ParseRule =
   addr rules[ord(`type`)]
 
 proc expression() =
   parsePrecedence(PREC_ASSIGNMENT)
+
+proc varDeclaration() =
+  let global = parseVariable("Expect variable name.")
+
+  if match(TOKEN_EQUAL):
+    expression()
+  else:
+    emitByte(OP_NIL)
+
+  consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.")
+
+  defineVariable(global)
+
+proc expressionStatement() =
+  expression()
+
+  consume(TOKEN_SEMICOLON, "Expect ';' after expression.")
+
+  emitByte(OP_POP)
+
+proc printStatement() =
+  expression()
+
+  consume(TOKEN_SEMICOLON, "Expect ';' after value.")
+
+  emitByte(OP_PRINT)
+
+proc synchronize() =
+  parser.panicMode = false
+
+  while parser.current.`type` != TOKEN_EOF:
+    if parser.previous.`type` == TOKEN_SEMICOLON:
+      return
+
+    case parser.current.`type`:
+    of TOKEN_CLASS, TOKEN_FUN, TOKEN_VAR, TOKEN_FOR, TOKEN_IF, TOKEN_WHILE, TOKEN_PRINT, TOKEN_RETURN:
+      return
+    else:
+      discard
+
+    advance()
+
+proc declaration() =
+  if match(TOKEN_VAR):
+    varDeclaration()
+  else:
+    statement()
+
+  if parser.panicMode:
+    synchronize()
+
+proc statement() =
+  if match(TOKEN_PRINT):
+    printStatement()
+  else:
+    expressionStatement()
 
 proc compile*(source: var string, chunk: var Chunk): bool =
   initScanner(source)
@@ -251,9 +351,8 @@ proc compile*(source: var string, chunk: var Chunk): bool =
 
   advance()
 
-  expression()
-
-  consume(TOKEN_EOF, "Expect end of expression.")
+  while not match(TOKEN_EOF):
+    declaration()
 
   endCompiler()
 

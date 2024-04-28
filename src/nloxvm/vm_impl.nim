@@ -29,9 +29,11 @@ proc initVM*() =
 
   vm.objects = nil
 
+  initTable(vm.globals)
   initTable(vm.strings)
 
 proc freeVM*() =
+  freeTable(vm.globals)
   freeTable(vm.strings)
 
   freeObjects()
@@ -74,6 +76,9 @@ template readByte(): uint8 =
 template readConstant(): Value =
   vm.chunk.constants.values[readByte()]
 
+template readString(): ptr ObjString =
+  asString(readConstant())
+
 template binaryOp(valueType: untyped, op: untyped) =
   if not(isNumber(peek(0))) or not(isNumber(peek(1))):
     runtimeError("Operands must be numbers.")
@@ -111,6 +116,31 @@ proc run(): InterpretResult =
       push(boolVal(true))
     of uint8(OP_FALSE):
       push(boolVal(false))
+    of uint8(OP_POP):
+      discard pop()
+    of uint8(OP_GET_GLOBAL):
+      let name = readString()
+
+      var value: Value
+
+      if not tableGet(vm.globals, name, value):
+        runtimeError("Undefined variable '$1'.", cast[cstring](name.chars))
+        return INTERPRET_RUNTIME_ERROR
+
+      push(value)
+    of uint8(OP_DEFINE_GLOBAL):
+      let name = readString()
+
+      discard tableSet(vm.globals, name, peek(0))
+      discard pop()
+    of uint8(OP_SET_GLOBAL):
+      let name = readString()
+
+      if tableSet(vm.globals, name, peek(0)):
+        discard tableDelete(vm.globals, name)
+
+        runtimeError("Undefined variable '$1'.", cast[cstring](name.chars))
+        return INTERPRET_RUNTIME_ERROR
     of uint8(OP_EQUAL):
       let
         b = pop()
@@ -147,9 +177,10 @@ proc run(): InterpretResult =
       binaryOp(numberVal, `/`)
     of uint8(OP_NOT):
       push(boolVal(isFalsey(pop())))
-    of uint8(OP_RETURN):
+    of uint8(OP_PRINT):
       printValue(pop())
       write(stdout, '\n')
+    of uint8(OP_RETURN):
       return INTERPRET_OK
     else:
       discard

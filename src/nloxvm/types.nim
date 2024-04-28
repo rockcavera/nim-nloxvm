@@ -8,6 +8,10 @@ type
     OP_NIL,
     OP_TRUE,
     OP_FALSE,
+    OP_POP,
+    OP_GET_GLOBAL,
+    OP_DEFINE_GLOBAL,
+    OP_SET_GLOBAL,
     OP_EQUAL,
     OP_GREATER,
     OP_LESS,
@@ -17,6 +21,7 @@ type
     OP_DIVIDE,
     OP_NOT,
     OP_NEGATE,
+    OP_PRINT,
     OP_RETURN
 
   Chunk* = object
@@ -49,7 +54,7 @@ type
     PREC_CALL,        # . ()
     PREC_PRIMARY
 
-  ParseFn* = proc() {.nimcall.}
+  ParseFn* = proc(canAssign: bool) {.nimcall.}
 
   ParseRule* = object
     prefix*: ParseFn
@@ -168,6 +173,7 @@ type
     ip*: ptr uint8
     stack*: array[STACK_MAX, Value]
     stackTop*: ptr Value
+    globals*: Table
     strings*: Table
     objects*: ptr Obj
 
