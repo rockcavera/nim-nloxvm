@@ -4,17 +4,15 @@ import ./value, ./types
 
 import ./private/pointer_arithmetics
 
-proc simpleInstruction(name: string, offset: int32): int32 =
-  write(stdout, fmt"{name}{'\n'}")
+proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32
 
-  return offset + 1
+proc disassembleChunk*(chunk: var Chunk, name: string) =
+  write(stdout, fmt"== {name} =={'\n'}")
 
-proc byteInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
-  let slot = chunk.code[offset + 1]
+  var offset = 0'i32
 
-  write(stdout, fmt"{name: <16} {slot: >4}")
-
-  offset + 2
+  while offset < chunk.count:
+    offset = disassembleInstruction(chunk, offset)
 
 proc constantInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
   let constant = chunk.code[offset + 1]
@@ -25,7 +23,19 @@ proc constantInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
 
   write(stdout, "'\n")
 
-  return offset + 2
+  offset + 2
+
+proc simpleInstruction(name: string, offset: int32): int32 =
+  write(stdout, fmt"{name}{'\n'}")
+
+  offset + 1
+
+proc byteInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
+  let slot = chunk.code[offset + 1]
+
+  write(stdout, fmt"{name: <16} {slot: >4}")
+
+  offset + 2
 
 proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
   write(stdout, fmt"{offset:04} ")
@@ -83,11 +93,3 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
   else:
     write(stdout, fmt"Unknown opcode {instruction}{'\n'}")
     return offset + 1
-
-proc disassembleChunk*(chunk: var Chunk, name: string) =
-  write(stdout, fmt"== {name} =={'\n'}")
-
-  var offset = 0'i32
-
-  while offset < chunk.count:
-    offset = disassembleInstruction(chunk, offset)

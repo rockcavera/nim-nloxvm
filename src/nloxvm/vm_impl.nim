@@ -157,12 +157,6 @@ proc run(): InterpretResult =
       binaryOp(boolVal, `>`)
     of uint8(OP_LESS):
       binaryOp(boolVal, `<`)
-    of uint8(OP_NEGATE):
-      if not isNumber(peek(0)):
-        runtimeError("Operand must be a number.")
-        return INTERPRET_RUNTIME_ERROR
-
-      push(numberVal(-asNumber(pop())))
     of uint8(OP_ADD):
       if isString(peek(0)) and isString(peek(1)):
         concatenate()
@@ -183,6 +177,12 @@ proc run(): InterpretResult =
       binaryOp(numberVal, `/`)
     of uint8(OP_NOT):
       push(boolVal(isFalsey(pop())))
+    of uint8(OP_NEGATE):
+      if not isNumber(peek(0)):
+        runtimeError("Operand must be a number.")
+        return INTERPRET_RUNTIME_ERROR
+
+      push(numberVal(-asNumber(pop())))
     of uint8(OP_PRINT):
       printValue(pop())
       write(stdout, '\n')

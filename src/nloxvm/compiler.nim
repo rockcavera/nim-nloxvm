@@ -139,6 +139,78 @@ proc declaration()
 proc getRule(`type`: TokenType): ptr ParseRule
 proc parsePrecedence(precedence: Precedence)
 
+proc identifierConstant(name: Token): uint8 =
+  makeConstant(objVal(cast[ptr Obj](copyString(name.start, name.length))))
+
+proc identifiersEqual(a: Token, b: Token): bool =
+  if a.length != b.length:
+    return false
+
+  cmpMem(a.start, b.start, a.length) == 0
+
+proc resolveLocal(compiler: ptr Compiler, name: Token): int32 =
+  for i in countdown(compiler.localCount - 1, 0):
+    let local = cast[ptr Local](addr compiler.locals[i])
+
+    if identifiersEqual(name, local.name):
+      if local.depth == -1:
+        error("Can't read local variable in its own initializer.")
+
+      return i
+
+  -1
+
+proc addLocal(name: Token) =
+  if current.localCount == UINT8_COUNT:
+    error("Too many local variables in function.")
+    return
+
+  let tmp = current.localCount
+
+  inc(current.localCount)
+
+  var local = cast[ptr Local](addr current.locals[tmp])
+
+  local.name = name
+  local.depth = -1
+
+proc declareVariable() =
+  if current.scopeDepth == 0:
+    return
+
+  let name = parser.previous
+
+  for i in countdown(current.localCount  - 1, 0):
+    let local = cast[ptr Local](addr current.locals[i])
+
+    if (local.depth != -1) and (local.depth < current.scopeDepth):
+      break
+
+    if identifiersEqual(name, local.name):
+      error("Already a variable with this name in this scope.")
+
+  addLocal(name)
+
+proc parseVariable(errorMessage: string): uint8 =
+  consume(TOKEN_IDENTIFIER, errorMessage)
+
+  declareVariable()
+
+  if current.scopeDepth > 0:
+    return 0
+
+  identifierConstant(parser.previous)
+
+proc markInitialized() =
+  current.locals[current.localCount - 1].depth = current.scopeDepth
+
+proc defineVariable(global: uint8) =
+  if current.scopeDepth > 0:
+    markInitialized()
+    return
+
+  emitBytes(OP_DEFINE_GLOBAL, global)
+
 proc binary(canAssign: bool) =
   let
     operatorType = parser.previous.`type`
@@ -195,9 +267,6 @@ proc number(canAssign: bool) =
 
 proc string(canAssign: bool) =
   emitConstant(objVal(cast[ptr Obj](copyString(parser.previous.start + 1, parser.previous.length - 2))))
-
-proc identifierConstant(name: Token): uint8
-proc resolveLocal(compiler: ptr Compiler, name: Token): int32
 
 proc namedVariable(name: Token, canAssign: bool) =
   var
@@ -301,78 +370,6 @@ proc parsePrecedence(precedence: Precedence) =
 
   if canAssign and match(TOKEN_EQUAL):
     error("Invalid assignment target.")
-
-proc identifierConstant(name: Token): uint8 =
-  makeConstant(objVal(cast[ptr Obj](copyString(name.start, name.length))))
-
-proc identifiersEqual(a: Token, b: Token): bool =
-  if a.length != b.length:
-    return false
-
-  cmpMem(a.start, b.start, a.length) == 0
-
-proc resolveLocal(compiler: ptr Compiler, name: Token): int32 =
-  for i in countdown(compiler.localCount - 1, 0):
-    let local = cast[ptr Local](addr compiler.locals[i])
-
-    if identifiersEqual(name, local.name):
-      if local.depth == -1:
-        error("Can't read local variable in its own initializer.")
-
-      return i
-
-  -1
-
-proc addLocal(name: Token) =
-  if current.localCount == UINT8_COUNT:
-    error("Too many local variables in function.")
-    return
-
-  let tmp = current.localCount
-
-  inc(current.localCount)
-
-  var local = cast[ptr Local](addr current.locals[tmp])
-
-  local.name = name
-  local.depth = -1
-
-proc declareVariable() =
-  if current.scopeDepth == 0:
-    return
-
-  let name = parser.previous
-
-  for i in countdown(current.localCount  - 1, 0):
-    let local = cast[ptr Local](addr current.locals[i])
-
-    if (local.depth != -1) and (local.depth < current.scopeDepth):
-      break
-
-    if identifiersEqual(name, local.name):
-      error("Already a variable with this name in this scope.")
-
-  addLocal(name)
-
-proc parseVariable(errorMessage: string): uint8 =
-  consume(TOKEN_IDENTIFIER, errorMessage)
-
-  declareVariable()
-
-  if current.scopeDepth > 0:
-    return 0
-
-  identifierConstant(parser.previous)
-
-proc markInitialized() =
-  current.locals[current.localCount - 1].depth = current.scopeDepth
-
-proc defineVariable(global: uint8) =
-  if current.scopeDepth > 0:
-    markInitialized()
-    return
-
-  emitBytes(OP_DEFINE_GLOBAL, global)
 
 proc getRule(`type`: TokenType): ptr ParseRule =
   addr rules[ord(`type`)]
