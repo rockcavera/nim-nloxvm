@@ -3,15 +3,14 @@ import std/private/[ospaths2], std/unittest
 
 import ./tconfig
 
-const folder = "expressions"
+const folder = "nil"
 
-suite "Expressions":
-  test "Evaluate":
+suite "Nil":
+  test "Literal":
     const
-      script = folder / "evaluate.lox"
+      script = folder / "literal.lox"
       expectedExitCode = 0
-      expectedOutput = """2
+      expectedOutput = """nil
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
-    skip() # after ch. 21

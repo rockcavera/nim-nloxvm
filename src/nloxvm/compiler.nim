@@ -30,7 +30,9 @@ proc errorAt(token: var Token, message: ptr char) =
   elif token.`type` == TOKEN_ERROR:
     discard
   else:
-    write(stderr, fmt" at '{lexeme(token)}'")
+    write(stderr, " at '")
+    discard writeBuffer(stderr, token.start, token.length)
+    write(stderr, "'")
 
   write(stderr, fmt": {cast[cstring](message)}{'\n'}")
 
@@ -268,8 +270,8 @@ proc parsePrecedence(precedence: Precedence) =
 
     infixRule(canAssign)
 
-    if canAssign and match(TOKEN_EQUAL):
-      error("Invalid assignment target.")
+  if canAssign and match(TOKEN_EQUAL):
+    error("Invalid assignment target.")
 
 proc identifierConstant(name: Token): uint8 =
   makeConstant(objVal(cast[ptr Obj](copyString(name.start, name.length))))

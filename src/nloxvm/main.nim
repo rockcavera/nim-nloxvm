@@ -25,13 +25,16 @@ proc runFile(path: string) =
     write(stderr, fmt"""Could not open file "{path}".{'\n'}""")
     quit(74)
 
+  if len(source) == 0:
+    source = "\0"
+
   let result = interpret(source)
 
   if result == INTERPRET_COMPILE_ERROR:
     quit(65)
 
   if result == INTERPRET_RUNTIME_ERROR:
-    quit(65)
+    quit(70)
 
 proc main*() =
   initVM()
