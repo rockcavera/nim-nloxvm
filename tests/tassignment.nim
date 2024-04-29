@@ -47,6 +47,18 @@ arg
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
 
+  test "Local":
+    const
+      script = folder / "local.lox"
+      expectedExitCode = 0
+      expectedOutput = """before
+after
+arg
+arg
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
   test "Prefix Operator":
     const
       script = folder / "prefix_operator.lox"

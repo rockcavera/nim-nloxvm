@@ -6,6 +6,36 @@ import ./tconfig
 const folder = "variable"
 
 suite "Variable":
+  test "Duplicate local":
+    const
+      script = folder / "duplicate_local.lox"
+      expectedExitCode = 65
+      expectedOutput = """[line 3] Error at 'a': Already a variable with this name in this scope.
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "In middle of block":
+    const
+      script = folder / "in_middle_of_block.lox"
+      expectedExitCode = 0
+      expectedOutput = """a
+a b
+a c
+a b d
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "In nested block":
+    const
+      script = folder / "in_nested_block.lox"
+      expectedExitCode = 0
+      expectedOutput = """outer
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
   test "Redeclare global":
     const
       script = folder / "redeclare_global.lox"
@@ -24,12 +54,62 @@ suite "Variable":
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
 
+  test "Scope reuse in different blocks":
+    const
+      script = folder / "scope_reuse_in_different_blocks.lox"
+      expectedExitCode = 0
+      expectedOutput = """first
+second
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Shadow and local":
+    const
+      script = folder / "shadow_and_local.lox"
+      expectedExitCode = 0
+      expectedOutput = """outer
+inner
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Shadow global":
+    const
+      script = folder / "shadow_global.lox"
+      expectedExitCode = 0
+      expectedOutput = """shadow
+global
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Shadow local":
+    const
+      script = folder / "shadow_local.lox"
+      expectedExitCode = 0
+      expectedOutput = """shadow
+local
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
   test "Undefined global":
     const
       script = folder / "undefined_global.lox"
       expectedExitCode = 70
       expectedOutput = """Undefined variable 'notDefined'.
 [line 1] in script
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Undefined local":
+    const
+      script = folder / "undefined_local.lox"
+      expectedExitCode = 70
+      expectedOutput = """Undefined variable 'notDefined'.
+[line 2] in script
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
@@ -57,6 +137,15 @@ suite "Variable":
       script = folder / "use_global_in_initializer.lox"
       expectedExitCode = 0
       expectedOutput = """value
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "User local in initializer":
+    const
+      script = folder / "use_local_in_initializer.lox"
+      expectedExitCode = 65
+      expectedOutput = """[line 3] Error at 'a': Can't read local variable in its own initializer.
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
