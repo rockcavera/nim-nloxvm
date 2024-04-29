@@ -7,6 +7,8 @@ when defined(DEBUG_PRINT_CODE):
 
 import ./private/pointer_arithmetics
 
+const UINT16_MAX = high(uint16).int32
+
 var
   parser: Parser
   current: ptr Compiler
@@ -93,6 +95,27 @@ template emitBytes(opCode1: OpCode, opCode2: OpCode) =
 template emitBytes(opCode: OpCode, `byte`: uint8) =
   emitBytes(uint8(opCode), `byte`)
 
+proc emitLoop(loopStart: int32) =
+  emitByte(OP_LOOP)
+
+  let offset = currentChunk().count - loopStart + 2
+
+  if offset > UINT16_MAX:
+    error("Loop body too large.")
+
+  emitByte(uint8((offset shr 8) and 0xff))
+  emitByte(uint8(offset and 0xff))
+
+proc emitJump(instruction: uint8): int32 =
+  emitByte(instruction)
+  emitByte(0xff)
+  emitByte(0xff)
+
+  currentChunk().count - 2
+
+template emitJump(instruction: OpCode): int32 =
+  emitJump(uint8(instruction))
+
 proc emitReturn() =
   emitByte(OP_RETURN)
 
@@ -109,6 +132,15 @@ proc makeConstant(value: Value): uint8 =
 
 proc emitConstant(value: Value) =
   emitBytes(OP_CONSTANT, makeConstant(value))
+
+proc patchJump(offset: int32) =
+  let jump = currentChunk().count - offset - 2
+
+  if jump > UINT16_MAX:
+    error("Too much code to jump over.")
+
+  currentChunk().code[offset] = uint8((jump shr 8) and 0xff)
+  currentChunk().code[offset + 1] = uint8(jump and 0xff)
 
 proc initCompiler(compiler: var Compiler) =
   compiler.localCount = 0
@@ -211,6 +243,15 @@ proc defineVariable(global: uint8) =
 
   emitBytes(OP_DEFINE_GLOBAL, global)
 
+proc `and`(canAssign: bool) =
+  let endJump = emitJump(OP_JUMP_IF_FALSE)
+
+  emitByte(OP_POP)
+
+  parsePrecedence(PREC_AND)
+
+  patchJump(endJump)
+
 proc binary(canAssign: bool) =
   let
     operatorType = parser.previous.`type`
@@ -264,6 +305,19 @@ proc number(canAssign: bool) =
   discard parseFloat(lexeme(parser.previous), value)
 
   emitConstant(numberVal(value))
+
+proc `or`(canAssign: bool) =
+  let
+    elseJump = emitJump(OP_JUMP_IF_FALSE)
+    endJump = emitJump(OP_JUMP)
+
+  patchJump(elseJump)
+
+  emitByte(OP_POP)
+
+  parsePrecedence(PREC_OR)
+
+  patchJump(endJump)
 
 proc string(canAssign: bool) =
   emitConstant(objVal(cast[ptr Obj](copyString(parser.previous.start + 1, parser.previous.length - 2))))
@@ -328,7 +382,7 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: variable, infix: nil, precedence: PREC_NONE),      # TOKEN_IDENTIFIER
   ParseRule(prefix: string, infix: nil, precedence: PREC_NONE),      # TOKEN_STRING
   ParseRule(prefix: number, infix: nil, precedence: PREC_NONE),   # TOKEN_NUMBER
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_AND
+  ParseRule(prefix: nil, infix: `and`, precedence: PREC_AND),      # TOKEN_AND
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_CLASS
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_ELSE
   ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_FALSE
@@ -336,7 +390,7 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_FUN
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_IF
   ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_NIL
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_OR
+  ParseRule(prefix: nil, infix: `or`, precedence: PREC_OR),      # TOKEN_OR
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_PRINT
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RETURN
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_SUPER
@@ -402,12 +456,110 @@ proc expressionStatement() =
 
   emitByte(OP_POP)
 
+proc forStatement() =
+  beginScope()
+
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.")
+
+  if match(TOKEN_SEMICOLON):
+    discard
+  elif match(TOKEN_VAR):
+    varDeclaration()
+  else:
+    expressionStatement()
+
+  var loopStart = currentChunk().count
+
+  var exitJump = -1'i32
+
+  if not match(TOKEN_SEMICOLON):
+    expression()
+
+    consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.")
+
+    exitJump = emitJump(OP_JUMP_IF_FALSE)
+
+    emitByte(OP_POP)
+
+  if not match(TOKEN_RIGHT_PAREN):
+    let
+      bodyJump = emitJump(OP_JUMP)
+      incrementStart = currentChunk().count
+
+    expression()
+
+    emitByte(OP_POP)
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.")
+
+    emitLoop(loopStart)
+
+    loopStart = incrementStart
+
+    patchJump(bodyJump)
+
+  statement()
+
+  emitLoop(loopStart)
+
+  if exitJump != -1:
+    patchJump(exitJump)
+
+    emitByte(OP_POP)
+
+  endScope()
+
+proc ifStatement() =
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.")
+
+  expression()
+
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.")
+
+  let thenJump = emitJump(OP_JUMP_IF_FALSE)
+
+  emitByte(OP_POP)
+
+  statement()
+
+  let elseJump = emitJump(OP_JUMP)
+
+  patchJump(thenJump)
+
+  emitByte(OP_POP)
+
+  if match(TOKEN_ELSE):
+    statement()
+
+  patchJump(elseJump)
+
 proc printStatement() =
   expression()
 
   consume(TOKEN_SEMICOLON, "Expect ';' after value.")
 
   emitByte(OP_PRINT)
+
+proc whileStatement() =
+  let loopStart = currentChunk().count
+
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.")
+
+  expression()
+
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.")
+
+  let exitJump = emitJump(OP_JUMP_IF_FALSE)
+
+  emitByte(OP_POP)
+
+  statement()
+
+  emitLoop(loopStart)
+
+  patchJump(exitJump)
+
+  emitByte(OP_POP)
 
 proc synchronize() =
   parser.panicMode = false
@@ -436,6 +588,12 @@ proc declaration() =
 proc statement() =
   if match(TOKEN_PRINT):
     printStatement()
+  elif match(TOKEN_FOR):
+    forStatement()
+  elif match(TOKEN_IF):
+    ifStatement()
+  elif match(TOKEN_WHILE):
+    whileStatement()
   elif match(TOKEN_LEFT_BRACE):
     beginScope()
 

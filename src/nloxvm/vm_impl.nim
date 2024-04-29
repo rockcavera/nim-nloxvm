@@ -76,6 +76,15 @@ template readByte(): uint8 =
 template readConstant(): Value =
   vm.chunk.constants.values[readByte()]
 
+template readShort(): uint16 =
+  var tmp = uint16(vm.ip[]) shl 8
+
+  vm.ip += 1
+  tmp = tmp or uint16(vm.ip[])
+  vm.ip += 1
+
+  tmp
+
 template readString(): ptr ObjString =
   asString(readConstant())
 
@@ -186,6 +195,18 @@ proc run(): InterpretResult =
     of uint8(OP_PRINT):
       printValue(pop())
       write(stdout, '\n')
+    of uint8(OP_JUMP):
+      let offset = readShort()
+
+      vm.ip += offset
+    of uint8(OP_JUMP_IF_FALSE):
+      let offset = readShort()
+
+      if isFalsey(peek(0)):
+        vm.ip += offset
+    of uint8(OP_LOOP):
+      let offset = readShort()
+      vm.ip -= offset
     of uint8(OP_RETURN):
       return INTERPRET_OK
     else:

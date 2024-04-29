@@ -37,6 +37,17 @@ proc byteInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
 
   offset + 2
 
+proc jumpInstruction(name: string, sign: int32, chunk: var Chunk, offset: int32): int32 =
+  var jump = uint16(chunk.code[offset + 1]) shl 8
+
+  jump = jump or uint8(chunk.code[offset + 2])
+
+  let offset2 = offset + 3 + sign * int32(jump)
+
+  write(stdout, fmt"{name: <16} {offset: >4} -> {offset2}")
+
+  offset + 3
+
 proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
   write(stdout, fmt"{offset:04} ")
 
@@ -88,6 +99,12 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return simpleInstruction("OP_NEGATE", offset)
   of uint8(OP_PRINT):
     return simpleInstruction("OP_PRINT", offset)
+  of uint8(OP_JUMP):
+    return jumpInstruction("OP_JUMP", 1, chunk, offset)
+  of uint8(OP_JUMP_IF_FALSE):
+    return jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset)
+  of uint8(OP_LOOP):
+    return jumpInstruction("OP_LOOP", -1, chunk, offset)
   of uint8(OP_RETURN):
     return simpleInstruction("OP_RETURN", offset)
   else:
