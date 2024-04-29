@@ -1,6 +1,6 @@
 import std/[parseutils, strformat]
 
-import ./chunk, ./object, ./scanner, ./value, ./types
+import ./chunk, ./common, ./object, ./scanner, ./value, ./types
 
 when defined(DEBUG_PRINT_CODE):
   import ./debug
@@ -9,6 +9,7 @@ import ./private/pointer_arithmetics
 
 var
   parser: Parser
+  current: ptr Compiler
   compilingChunk: ptr Chunk
 
 template lexeme(token: Token): openArray[char] =
@@ -109,12 +110,28 @@ proc makeConstant(value: Value): uint8 =
 proc emitConstant(value: Value) =
   emitBytes(OP_CONSTANT, makeConstant(value))
 
+proc initCompiler(compiler: var Compiler) =
+  compiler.localCount = 0
+  compiler.scopeDepth = 0
+  current = addr compiler
+
 proc endCompiler() =
   emitReturn()
 
   when defined(DEBUG_PRINT_CODE):
     if not parser.hadError:
       disassembleChunk(currentChunk(), "code")
+
+proc beginScope() =
+  inc(current.scopeDepth)
+
+proc endScope() =
+  dec(current.scopeDepth)
+
+  while (current.localCount > 0) and (current.locals[current.localCount - 1].depth > current.scopeDepth):
+    emitByte(OP_POP)
+
+    dec(current.localCount)
 
 proc expression()
 proc statement()
@@ -180,16 +197,28 @@ proc string(canAssign: bool) =
   emitConstant(objVal(cast[ptr Obj](copyString(parser.previous.start + 1, parser.previous.length - 2))))
 
 proc identifierConstant(name: Token): uint8
+proc resolveLocal(compiler: ptr Compiler, name: Token): int32
 
 proc namedVariable(name: Token, canAssign: bool) =
-  let arg = identifierConstant(name)
+  var
+    getOp: OpCode
+    setOp: OpCode
+    arg = resolveLocal(current, name)
+
+  if arg != -1:
+    getOp = OP_GET_LOCAL
+    setOp = OP_SET_LOCAL
+  else:
+    arg = identifierConstant(name).int32
+    getOp = OP_GET_GLOBAL
+    setOp = OP_SET_GLOBAL
 
   if canAssign and match(TOKEN_EQUAL):
     expression()
 
-    emitBytes(OP_SET_GLOBAL, arg)
+    emitBytes(setOp, uint8(arg))
   else:
-    emitBytes(OP_GET_GLOBAL, arg)
+    emitBytes(getOp, uint8(arg))
 
 proc variable(canAssign: bool) =
   namedVariable(parser.previous, canAssign)
@@ -276,12 +305,73 @@ proc parsePrecedence(precedence: Precedence) =
 proc identifierConstant(name: Token): uint8 =
   makeConstant(objVal(cast[ptr Obj](copyString(name.start, name.length))))
 
+proc identifiersEqual(a: Token, b: Token): bool =
+  if a.length != b.length:
+    return false
+
+  cmpMem(a.start, b.start, a.length) == 0
+
+proc resolveLocal(compiler: ptr Compiler, name: Token): int32 =
+  for i in countdown(compiler.localCount - 1, 0):
+    let local = cast[ptr Local](addr compiler.locals[i])
+
+    if identifiersEqual(name, local.name):
+      if local.depth == -1:
+        error("Can't read local variable in its own initializer.")
+
+      return i
+
+  -1
+
+proc addLocal(name: Token) =
+  if current.localCount == UINT8_COUNT:
+    error("Too many local variables in function.")
+    return
+
+  let tmp = current.localCount
+
+  inc(current.localCount)
+
+  var local = cast[ptr Local](addr current.locals[tmp])
+
+  local.name = name
+  local.depth = -1
+
+proc declareVariable() =
+  if current.scopeDepth == 0:
+    return
+
+  let name = parser.previous
+
+  for i in countdown(current.localCount  - 1, 0):
+    let local = cast[ptr Local](addr current.locals[i])
+
+    if (local.depth != -1) and (local.depth < current.scopeDepth):
+      break
+
+    if identifiersEqual(name, local.name):
+      error("Already a variable with this name in this scope.")
+
+  addLocal(name)
+
 proc parseVariable(errorMessage: string): uint8 =
   consume(TOKEN_IDENTIFIER, errorMessage)
 
+  declareVariable()
+
+  if current.scopeDepth > 0:
+    return 0
+
   identifierConstant(parser.previous)
 
+proc markInitialized() =
+  current.locals[current.localCount - 1].depth = current.scopeDepth
+
 proc defineVariable(global: uint8) =
+  if current.scopeDepth > 0:
+    markInitialized()
+    return
+
   emitBytes(OP_DEFINE_GLOBAL, global)
 
 proc getRule(`type`: TokenType): ptr ParseRule =
@@ -289,6 +379,12 @@ proc getRule(`type`: TokenType): ptr ParseRule =
 
 proc expression() =
   parsePrecedence(PREC_ASSIGNMENT)
+
+proc `block`() =
+  while not(check(TOKEN_RIGHT_BRACE)) and not(check(TOKEN_EOF)):
+    declaration()
+
+  consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.")
 
 proc varDeclaration() =
   let global = parseVariable("Expect variable name.")
@@ -343,11 +439,21 @@ proc declaration() =
 proc statement() =
   if match(TOKEN_PRINT):
     printStatement()
+  elif match(TOKEN_LEFT_BRACE):
+    beginScope()
+
+    `block`()
+
+    endScope()
   else:
     expressionStatement()
 
 proc compile*(source: var string, chunk: var Chunk): bool =
   initScanner(source)
+
+  var compiler: Compiler
+
+  initCompiler(compiler)
 
   compilingChunk = addr chunk
 

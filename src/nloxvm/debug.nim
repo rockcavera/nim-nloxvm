@@ -9,6 +9,13 @@ proc simpleInstruction(name: string, offset: int32): int32 =
 
   return offset + 1
 
+proc byteInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
+  let slot = chunk.code[offset + 1]
+
+  write(stdout, fmt"{name: <16} {slot: >4}")
+
+  offset + 2
+
 proc constantInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
   let constant = chunk.code[offset + 1]
 
@@ -41,6 +48,10 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return simpleInstruction("OP_FALSE", offset)
   of uint8(OP_POP):
     return simpleInstruction("OP_POP", offset)
+  of uint8(OP_GET_LOCAL):
+    return byteInstruction("OP_GET_LOCAL", chunk, offset)
+  of uint8(OP_SET_LOCAL):
+    return byteInstruction("OP_SET_LOCAL", chunk, offset)
   of uint8(OP_GET_GLOBAL):
     return constantInstruction("OP_GET_GLOBAL", chunk, offset)
   of uint8(OP_DEFINE_GLOBAL):

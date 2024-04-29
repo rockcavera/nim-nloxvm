@@ -118,6 +118,12 @@ proc run(): InterpretResult =
       push(boolVal(false))
     of uint8(OP_POP):
       discard pop()
+    of uint8(OP_GET_LOCAL):
+      let slot = readByte()
+      push(vm.stack[slot])
+    of uint8(OP_SET_LOCAL):
+      let slot = readByte()
+      vm.stack[slot] = peek(0)
     of uint8(OP_GET_GLOBAL):
       let name = readString()
 

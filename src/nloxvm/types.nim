@@ -1,3 +1,5 @@
+import ./common
+
 const STACK_MAX = 256
 
 type
@@ -9,6 +11,8 @@ type
     OP_TRUE,
     OP_FALSE,
     OP_POP,
+    OP_GET_LOCAL,
+    OP_SET_LOCAL,
     OP_GET_GLOBAL,
     OP_DEFINE_GLOBAL,
     OP_SET_GLOBAL,
@@ -60,6 +64,15 @@ type
     prefix*: ParseFn
     infix*: ParseFn
     precedence*: Precedence
+
+  Local* = object
+    name*: Token
+    depth*: int32
+
+  Compiler* = object
+    locals*: array[UINT8_COUNT, Local]
+    localCount*: int32
+    scopeDepth*: int32
 
   # end
 
