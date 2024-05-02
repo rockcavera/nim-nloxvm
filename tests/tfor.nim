@@ -73,3 +73,34 @@ after
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Return inside":
+    const
+      script = folder / "return_inside.lox"
+      expectedExitCode = 0
+      expectedOutput = """i
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Syntax":
+    const
+      script = folder / "syntax.lox"
+      expectedExitCode = 0
+      expectedOutput = """1
+2
+3
+0
+1
+2
+done
+0
+1
+0
+1
+2
+0
+1
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

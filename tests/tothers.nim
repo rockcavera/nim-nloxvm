@@ -33,3 +33,12 @@ true
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Unexpected character":
+    const
+      script = "unexpected_character.lox"
+      expectedExitCode = 65
+      expectedOutput = """[line 3] Error: Unexpected character.
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

@@ -46,3 +46,12 @@ suite "While":
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Return inside":
+    const
+      script = folder / "return_inside.lox"
+      expectedExitCode = 0
+      expectedOutput = """i
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

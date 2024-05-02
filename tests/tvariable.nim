@@ -176,3 +176,31 @@ local
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Collide with parameter":
+    const
+      script = folder / "collide_with_parameter.lox"
+      expectedExitCode = 65
+      expectedOutput = """[line 2] Error at 'a': Already a variable with this name in this scope.
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Duplicate parameter":
+    const
+      script = folder / "duplicate_parameter.lox"
+      expectedExitCode = 65
+      expectedOutput = """[line 2] Error at 'arg': Already a variable with this name in this scope.
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Early bound":
+    const
+      script = folder / "early_bound.lox"
+      expectedExitCode = 0
+      expectedOutput = """outer
+outer
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

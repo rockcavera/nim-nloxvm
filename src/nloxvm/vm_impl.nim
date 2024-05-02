@@ -34,7 +34,7 @@ proc runtimeError(format: string, args: varargs[string, `$`]) =
     if isNil(function.name):
       write(stderr, "script\n")
     else:
-      write(stderr, fmt"{cast[cstring](function.name.chars)}{'\n'}")
+      write(stderr, fmt"{cast[cstring](function.name.chars)}(){'\n'}")
 
   resetStack()
 
