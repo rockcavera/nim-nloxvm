@@ -1,11 +1,9 @@
 import system/ansi_c
 
-import ./globals, ./types
-
 template allocate*[T](`type`: typedesc[T], count: untyped): ptr T =
   cast[ptr T](reallocate(nil, 0, sizeof(`type`) * count))
 
-template free[T](`type`: typedesc, `pointer`: T) =
+template free*[T](`type`: typedesc, `pointer`: T) =
   discard reallocate(`pointer`, sizeof(`type`), 0)
 
 template grow_capacity*[T](capacity: T): T =
@@ -27,22 +25,3 @@ proc reallocate*(`pointer`: pointer, oldSize: int, newSize: int): pointer =
 
   if isNil(result):
     quit(1)
-
-proc freeObject(`object`: ptr Obj) =
-  case `object`.`type`
-  of OBJT_STRING:
-    let string = cast[ptr ObjString](`object`)
-
-    free_array(char, string.chars, string.length + 1)
-
-    free(ObjString, `object`)
-
-proc freeObjects*() =
-  var `object` = vm.objects
-
-  while `object` != nil:
-    let next = `object`.next
-
-    freeObject(`object`)
-
-    `object` = next

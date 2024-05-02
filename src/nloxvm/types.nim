@@ -1,6 +1,8 @@
 import ./common
 
-const STACK_MAX = 256
+const
+  FRAMES_MAX* = 64
+  STACK_MAX = (FRAMES_MAX * UINT8_COUNT)
 
 type
   # chunk.nim
@@ -29,6 +31,7 @@ type
     OP_JUMP,
     OP_JUMP_IF_FALSE,
     OP_LOOP,
+    OP_CALL,
     OP_RETURN
 
   Chunk* = object
@@ -72,7 +75,14 @@ type
     name*: Token
     depth*: int32
 
+  FunctionType* = enum
+    TYPE_FUNCTION,
+    TYPE_SCRIPT
+
   Compiler* = object
+    enclosing*: ptr Compiler
+    function*: ptr ObjFunction
+    `type`*: FunctionType
     locals*: array[UINT8_COUNT, Local]
     localCount*: int32
     scopeDepth*: int32
@@ -82,11 +92,25 @@ type
   # object.nim
 
   ObjType* = enum
+    OBJT_FUNCTION,
+    OBJT_NATIVE,
     OBJT_STRING
 
   Obj* = object
     `type`*: ObjType
     next*: ptr Obj
+
+  ObjFunction* = object
+    obj*: Obj
+    arity*: int32
+    chunk*: Chunk
+    name*: ptr ObjString
+
+  NativeFn* = proc(argCount: int32, args: ptr Value): Value {.nimcall.}
+
+  ObjNative* = object
+    obj*: Obj
+    function*: NativeFn
 
   ObjString* = object
     obj*: Obj
@@ -184,9 +208,15 @@ type
 
   # vm.nim
 
-  VM* = object
-    chunk*: ptr Chunk
+  CallFrame* = object
+    function*: ptr ObjFunction
     ip*: ptr uint8
+    slots*: ptr Value
+
+  VM* = object
+    frames*: array[FRAMES_MAX, CallFrame]
+    frameCount*: int32
+
     stack*: array[STACK_MAX, Value]
     stackTop*: ptr Value
     globals*: Table

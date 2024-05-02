@@ -1,12 +1,26 @@
-import ./globals, ./memory, ./value, ./table, ./types
+import std/strformat
+
+import ./chunk, ./globals, ./memory, ./value, ./table, ./types
 
 import ./private/pointer_arithmetics
 
-template objType(value: Value): ObjType =
+template objType*(value: Value): ObjType =
   asObj(value).`type`
+
+template isFunction*(value: Value): bool =
+  isObjType(value, OBJT_FUNCTION)
+
+template isNative*(value: Value): bool =
+  isObjType(value, OBJT_NATIVE)
 
 template isString*(value: Value): bool =
   isObjType(value, OBJT_STRING)
+
+template asFunction*(value: Value): ptr ObjFunction =
+  cast[ptr ObjFunction](asObj(value))
+
+template asNative*(value: Value): NativeFn =
+  cast[ptr ObjNative](asObj(value)).function
 
 template asString*(value: Value): ptr ObjString =
   cast[ptr ObjString](asObj(value))
@@ -25,6 +39,17 @@ proc allocateObject(size: int, `type`: ObjType): ptr Obj =
   result.`type` = `type`
   result.next = vm.objects
   vm.objects = result
+
+proc newFunction*(): ptr ObjFunction =
+  result = allocate_obj(ObjFunction, OBJT_FUNCTION)
+  result.arity = 0
+  result.name = nil
+
+  initChunk(result.chunk)
+
+proc newNative*(function: NativeFn): ptr ObjNative =
+  result = allocate_obj(ObjNative, OBJT_NATIVE)
+  result.function = function
 
 proc allocateString(chars: ptr char, length: int32, hash: uint32): ptr ObjString =
   result = allocate_obj(ObjString, OBJT_STRING)
@@ -68,7 +93,49 @@ proc copyString*(chars: ptr char, length: int32): ptr ObjString =
 
   allocateString(heapChars, length, hash)
 
+proc printFunction(function: ptr ObjFunction) =
+  if isNil(function.name):
+    write(stdout, "<script>")
+    return
+
+  write(stdout, fmt"<fn {cast[cstring](function.name.chars)}>")
+
 proc printObject*(value: Value) =
   case objType(value)
+  of OBJT_FUNCTION:
+    printFunction(asFunction(value))
+  of OBJT_NATIVE:
+    write(stdout, "<native fn>")
   of OBJT_STRING:
     write(stdout, cast[cstring](asCString(value)))
+
+# memory.nim
+
+proc freeObject(`object`: ptr Obj) =
+  case `object`.`type`
+  of OBJT_FUNCTION:
+    let function = cast[ptr ObjFunction](`object`)
+
+    freeChunk(function.chunk)
+
+    free(ObjFunction, `object`)
+  of OBJT_NATIVE:
+    free(ObjNative, `object`)
+  of OBJT_STRING:
+    let string = cast[ptr ObjString](`object`)
+
+    free_array(char, string.chars, string.length + 1)
+
+    free(ObjString, `object`)
+
+proc freeObjects*() =
+  var `object` = vm.objects
+
+  while `object` != nil:
+    let next = `object`.next
+
+    freeObject(`object`)
+
+    `object` = next
+
+# end

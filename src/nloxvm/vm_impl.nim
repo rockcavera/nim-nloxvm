@@ -1,14 +1,21 @@
-import std/strutils
+import std/[strformat, strutils, times]
 
-import ./chunk, ./compiler, ./globals, ./memory, ./object, ./table, ./types, ./value
+import ./compiler, ./globals, ./memory, ./object, ./printer, ./table, ./types, ./value
 
 when defined(DEBUG_TRACE_EXECUTION):
   import ./debug
 
 import ./private/pointer_arithmetics
 
+proc push(value: Value)
+proc pop(): Value
+
+proc clockNative(argCount: int32, args: ptr Value): Value =
+  numberVal(cpuTime())
+
 proc resetStack() =
   vm.stackTop = cast[ptr Value](addr vm.stack[0])
+  vm.frameCount = 0
 
 proc runtimeError(format: string, args: varargs[string, `$`]) =
   if len(args) > 0:
@@ -16,13 +23,29 @@ proc runtimeError(format: string, args: varargs[string, `$`]) =
   else:
     write(stderr, format, "\n")
 
-  let
-    instruction = vm.ip - vm.chunk.code - 1
-    line = vm.chunk.lines[instruction]
+  for i in countdown(vm.frameCount - 1, 0):
+    let
+      frame = cast[ptr CallFrame](addr vm.frames[i])
+      function = frame.function
+      instruction = frame.ip - function.chunk.code - 1
 
-  write(stderr, "[line $1] in script\n" % $line)
+    write(stderr, "[line $1] in " % $function.chunk.lines[instruction])
+
+    if isNil(function.name):
+      write(stderr, "script\n")
+    else:
+      write(stderr, fmt"{cast[cstring](function.name.chars)}{'\n'}")
 
   resetStack()
+
+proc defineNative(name: cstring, function: NativeFn) =
+  push(objVal(cast[ptr Obj](copyString(cast[ptr char](name), len(name).int32))))
+  push(objVal(cast[ptr Obj](newNative(function))))
+
+  discard tableSet(vm.globals, asString(vm.stack[0]), vm.stack[1])
+
+  discard pop()
+  discard pop()
 
 proc initVM*() =
   resetStack()
@@ -31,6 +54,8 @@ proc initVM*() =
 
   initTable(vm.globals)
   initTable(vm.strings)
+
+  defineNative(cstring"clock", clockNative)
 
 proc freeVM*() =
   freeTable(vm.globals)
@@ -48,6 +73,47 @@ proc pop(): Value =
 
 proc peek(distance: int32): Value =
   vm.stackTop[-1 - distance]
+
+proc call(function: ptr ObjFunction, argCount: int32): bool =
+  if argCount != function.arity:
+    runtimeError("Expected $1 arguments but got $2.", function.arity, argCount)
+    return false
+
+  if vm.frameCount == FRAMES_MAX:
+    runtimeError("Stack overflow.")
+    return false
+
+  var frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount])
+
+  inc(vm.frameCount)
+
+  frame.function = function
+  frame.ip = function.chunk.code
+  frame.slots = vm.stackTop - argCount - 1
+
+  return true
+
+proc callValue(callee: Value, argCount: int32): bool =
+  if isObj(callee):
+    case objType(callee)
+    of OBJT_FUNCTION:
+      return call(asFunction(callee), argCount)
+    of OBJT_NATIVE:
+      let
+        native = asNative(callee)
+        res = native(argCount, vm.stackTop - argCount)
+
+      vm.stackTop -= argCount + 1
+
+      push(res)
+
+      return true
+    else:
+      discard
+
+  runtimeError("Can only call functions and classes.")
+
+  return false
 
 proc isFalsey(value: Value): bool =
   isNil(value) or (isBool(value) and not(asBool(value)))
@@ -69,21 +135,21 @@ proc concatenate() =
   push(objVal(cast[ptr Obj](result)))
 
 template readByte(): uint8 =
-  let tmp = vm.ip[]
-  vm.ip += 1
+  let tmp = frame.ip[]
+  frame.ip += 1
+  tmp
+
+template readShort(): uint16 =
+  var tmp = uint16(frame.ip[]) shl 8
+
+  frame.ip += 1
+  tmp = tmp or uint16(frame.ip[])
+  frame.ip += 1
+
   tmp
 
 template readConstant(): Value =
-  vm.chunk.constants.values[readByte()]
-
-template readShort(): uint16 =
-  var tmp = uint16(vm.ip[]) shl 8
-
-  vm.ip += 1
-  tmp = tmp or uint16(vm.ip[])
-  vm.ip += 1
-
-  tmp
+  frame.function.chunk.constants.values[readByte()]
 
 template readString(): ptr ObjString =
   asString(readConstant())
@@ -100,6 +166,8 @@ template binaryOp(valueType: untyped, op: untyped) =
   push(valueType(op(a, b)))
 
 proc run(): InterpretResult =
+  var frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+
   while true:
     when defined(DEBUG_TRACE_EXECUTION):
       write(stdout, "          ")
@@ -111,7 +179,7 @@ proc run(): InterpretResult =
 
       write(stdout, '\n')
 
-      discard disassembleInstruction(vm.chunk[], int32(vm.ip - vm.chunk.code))
+      discard disassembleInstruction(frame.function.chunk[], int32(frame.ip - frame.function.chunk.code))
 
     let instruction = readByte()
 
@@ -129,10 +197,10 @@ proc run(): InterpretResult =
       discard pop()
     of uint8(OP_GET_LOCAL):
       let slot = readByte()
-      push(vm.stack[slot])
+      push(frame.slots[slot])
     of uint8(OP_SET_LOCAL):
       let slot = readByte()
-      vm.stack[slot] = peek(0)
+      frame.slots[slot] = peek(0)
     of uint8(OP_GET_GLOBAL):
       let name = readString()
 
@@ -198,32 +266,47 @@ proc run(): InterpretResult =
     of uint8(OP_JUMP):
       let offset = readShort()
 
-      vm.ip += offset
+      frame.ip += offset
     of uint8(OP_JUMP_IF_FALSE):
       let offset = readShort()
 
       if isFalsey(peek(0)):
-        vm.ip += offset
+        frame.ip += offset
     of uint8(OP_LOOP):
       let offset = readShort()
-      vm.ip -= offset
+      frame.ip -= offset
+    of uint8(OP_CALL):
+      let argCount = readByte().int32
+
+      if not callValue(peek(argCount), argCount):
+        return INTERPRET_RUNTIME_ERROR
+
+      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
     of uint8(OP_RETURN):
-      return INTERPRET_OK
+      let res = pop()
+
+      dec(vm.frameCount)
+
+      if vm.frameCount == 0:
+        discard pop()
+        return INTERPRET_OK
+
+      vm.stackTop = frame.slots
+
+      push(res)
+
+      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
     else:
       discard
 
 proc interpret*(source: var string): InterpretResult =
-  var chunk: Chunk
+  let function = compile(source)
 
-  initChunk(chunk)
-
-  if not compile(source, chunk):
-    freeChunk(chunk)
+  if isNil(function):
     return INTERPRET_COMPILE_ERROR
 
-  vm.chunk = addr chunk
-  vm.ip = vm.chunk.code
+  push(objVal(cast[ptr Obj](function)))
 
-  result = run()
+  discard call(function, 0)
 
-  freeChunk(chunk)
+  run()

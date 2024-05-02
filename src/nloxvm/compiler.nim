@@ -12,13 +12,12 @@ const UINT16_MAX = high(uint16).int32
 var
   parser: Parser
   current: ptr Compiler
-  compilingChunk: ptr Chunk
 
 template lexeme(token: Token): openArray[char] =
   toOpenArray(cast[cstring](token.start), 0, token.length - 1)
 
 proc currentChunk(): var Chunk =
-  compilingChunk[]
+  current.function.chunk
 
 proc errorAt(token: var Token, message: ptr char) =
   if parser.panicMode:
@@ -49,6 +48,9 @@ proc error(message: string) =
 
 proc errorAtCurrent(message: ptr char) =
   errorAt(parser.current, message)
+
+proc errorAtCurrent(message: string) =
+  errorAt(parser.current, cast[ptr char](addr message[0]))
 
 proc advance() =
   parser.previous = parser.current
@@ -117,6 +119,7 @@ template emitJump(instruction: OpCode): int32 =
   emitJump(uint8(instruction))
 
 proc emitReturn() =
+  emitByte(OP_NIL)
   emitByte(OP_RETURN)
 
 proc makeConstant(value: Value): uint8 =
@@ -142,17 +145,38 @@ proc patchJump(offset: int32) =
   currentChunk().code[offset] = uint8((jump shr 8) and 0xff)
   currentChunk().code[offset + 1] = uint8(jump and 0xff)
 
-proc initCompiler(compiler: var Compiler) =
+proc initCompiler(compiler: var Compiler, `type`: FunctionType) =
+  compiler.enclosing = current
+  compiler.function = nil
+  compiler.`type` = `type`
   compiler.localCount = 0
   compiler.scopeDepth = 0
+  compiler.function = newFunction()
   current = addr compiler
 
-proc endCompiler() =
+  if `type` != TYPE_SCRIPT:
+    current.function.name = copyString(parser.previous.start, parser.previous.length)
+
+  var local = cast[ptr Local](addr current.locals[current.localCount])
+
+  inc(current.localCount)
+
+  local.depth = 0
+  local.name.start = cast[ptr char](cstring"")
+  local.name.length = 0
+
+proc endCompiler(): ptr ObjFunction =
   emitReturn()
+
+  result = current.function
 
   when defined(DEBUG_PRINT_CODE):
     if not parser.hadError:
-      disassembleChunk(currentChunk(), "code")
+      disassembleChunk(currentChunk(),
+                       if not isNil(result.name): result.name.chars
+                       else: cast[ptr char](cstring"<script>"))
+
+  current = current.enclosing
 
 proc beginScope() =
   inc(current.scopeDepth)
@@ -234,6 +258,9 @@ proc parseVariable(errorMessage: string): uint8 =
   identifierConstant(parser.previous)
 
 proc markInitialized() =
+  if current.scopeDepth == 0:
+    return
+
   current.locals[current.localCount - 1].depth = current.scopeDepth
 
 proc defineVariable(global: uint8) =
@@ -242,6 +269,21 @@ proc defineVariable(global: uint8) =
     return
 
   emitBytes(OP_DEFINE_GLOBAL, global)
+
+proc argumentList(): uint8 =
+  if not check(TOKEN_RIGHT_PAREN):
+    while true:
+      expression()
+
+      if result == 255:
+        error("Can't have more than 255 arguments.")
+
+      inc(result)
+
+      if not match(TOKEN_COMMA):
+        break
+
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.")
 
 proc `and`(canAssign: bool) =
   let endJump = emitJump(OP_JUMP_IF_FALSE)
@@ -282,6 +324,11 @@ proc binary(canAssign: bool) =
     emitByte(OP_DIVIDE)
   else:
     discard
+
+proc call(canAssign: bool) =
+  let argCount = argumentList()
+
+  emitBytes(OP_CALL, argCount)
 
 proc literal(canAssign: bool) =
   case parser.previous.`type`
@@ -360,7 +407,7 @@ proc unary(canAssign: bool) =
     discard
 
 let rules: array[40, ParseRule] = [
-  ParseRule(prefix: grouping, infix: nil, precedence: PREC_NONE), # TOKEN_LEFT_PAREN
+  ParseRule(prefix: grouping, infix: call, precedence: PREC_CALL), # TOKEN_LEFT_PAREN
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RIGHT_PAREN
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_LEFT_BRACE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RIGHT_BRACE
@@ -436,6 +483,47 @@ proc `block`() =
     declaration()
 
   consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.")
+
+proc function(`type`: FunctionType) =
+  var compiler: Compiler
+
+  initCompiler(compiler, `type`)
+
+  beginScope()
+
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.")
+
+  if not check(TOKEN_RIGHT_PAREN):
+    while true:
+      inc(current.function.arity)
+
+      if current.function.arity > 255:
+        errorAtCurrent("Can't have more than 255 parameters.")
+
+      let constant = parseVariable("Expect parameter name.")
+
+      defineVariable(constant)
+
+      if not match(TOKEN_COMMA):
+        break
+
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.")
+  consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.")
+
+  `block`()
+
+  let function = endCompiler()
+
+  emitBytes(OP_CONSTANT, makeConstant(objVal(cast[ptr Obj](function))))
+
+proc funDeclaration() =
+  let global = parseVariable("Expect function name.")
+
+  markInitialized()
+
+  function(TYPE_FUNCTION)
+
+  defineVariable(global)
 
 proc varDeclaration() =
   let global = parseVariable("Expect variable name.")
@@ -540,6 +628,19 @@ proc printStatement() =
 
   emitByte(OP_PRINT)
 
+proc returnStatement() =
+  if current.`type` == TYPE_SCRIPT:
+    error("Can't return from top-level code.")
+
+  if match(TOKEN_SEMICOLON):
+    emitReturn()
+  else:
+    expression()
+
+    consume(TOKEN_SEMICOLON, "Expect ';' after return value.")
+
+    emitByte(OP_RETURN)
+
 proc whileStatement() =
   let loopStart = currentChunk().count
 
@@ -577,7 +678,9 @@ proc synchronize() =
     advance()
 
 proc declaration() =
-  if match(TOKEN_VAR):
+  if match(TOKEN_FUN):
+    funDeclaration()
+  elif match(TOKEN_VAR):
     varDeclaration()
   else:
     statement()
@@ -592,6 +695,8 @@ proc statement() =
     forStatement()
   elif match(TOKEN_IF):
     ifStatement()
+  elif match(TOKEN_RETURN):
+    returnStatement()
   elif match(TOKEN_WHILE):
     whileStatement()
   elif match(TOKEN_LEFT_BRACE):
@@ -603,20 +708,21 @@ proc statement() =
   else:
     expressionStatement()
 
-proc compile*(source: var string, chunk: var Chunk): bool =
+proc compile*(source: var string): ptr ObjFunction =
   initScanner(source)
 
   var compiler: Compiler
 
-  initCompiler(compiler)
+  initCompiler(compiler, TYPE_SCRIPT)
 
-  compilingChunk = addr chunk
+  parser.hadError = false
+  parser.panicMode = false
 
   advance()
 
   while not match(TOKEN_EOF):
     declaration()
 
-  endCompiler()
+  let function = endCompiler()
 
-  not parser.hadError
+  return if parser.hadError: nil else: function

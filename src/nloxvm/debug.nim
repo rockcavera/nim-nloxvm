@@ -1,13 +1,13 @@
 import std/strformat
 
-import ./value, ./types
+import ./printer, ./types
 
 import ./private/pointer_arithmetics
 
 proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32
 
-proc disassembleChunk*(chunk: var Chunk, name: string) =
-  write(stdout, fmt"== {name} =={'\n'}")
+proc disassembleChunk*(chunk: var Chunk, name: ptr char) =
+  write(stdout, fmt"== {cast[cstring](name)} =={'\n'}")
 
   var offset = 0'i32
 
@@ -105,6 +105,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset)
   of uint8(OP_LOOP):
     return jumpInstruction("OP_LOOP", -1, chunk, offset)
+  of uint8(OP_CALL):
+    return byteInstruction("OP_CALL", chunk, offset)
   of uint8(OP_RETURN):
     return simpleInstruction("OP_RETURN", offset)
   else:

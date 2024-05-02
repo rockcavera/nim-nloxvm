@@ -1,5 +1,3 @@
-import std/strformat
-
 import ./memory, ./types
 
 import ./private/pointer_arithmetics
@@ -55,19 +53,6 @@ proc writeValueArray*(`array`: var ValueArray, value: Value) =
 proc freeValueArray*(`array`: var ValueArray) =
   free_array(Value, `array`.values, `array`.capacity)
   initValueArray(`array`)
-
-import ./object
-
-proc printValue*(value: Value) =
-  case value.`type`
-  of VAL_BOOL:
-    write(stdout, $asBool(value))
-  of VAL_NIL:
-    write(stdout, "nil")
-  of VAL_NUMBER:
-    write(stdout, fmt"{asNumber(value):g}")
-  of VAL_OBJ:
-    printObject(value)
 
 proc valuesEqual*(a: Value, b: Value): bool =
   if a.`type` != b.`type`:
