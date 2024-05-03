@@ -33,7 +33,7 @@ proc simpleInstruction(name: string, offset: int32): int32 =
 proc byteInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
   let slot = chunk.code[offset + 1]
 
-  write(stdout, fmt"{name: <16} {slot: >4}")
+  write(stdout, fmt"{name: <16} {slot: >4}{'\n'}")
 
   offset + 2
 
@@ -44,7 +44,7 @@ proc jumpInstruction(name: string, sign: int32, chunk: var Chunk, offset: int32)
 
   let offset2 = offset + 3 + sign * int32(jump)
 
-  write(stdout, fmt"{name: <16} {offset: >4} -> {offset2}")
+  write(stdout, fmt"{name: <16} {offset: >4} -> {offset2}{'\n'}")
 
   offset + 3
 
@@ -80,9 +80,9 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
   of uint8(OP_SET_GLOBAL):
     return constantInstruction("OP_SET_GLOBAL", chunk, offset)
   of uint8(OP_GET_UPVALUE):
-    return constantInstruction("OP_GET_UPVALUE", chunk, offset)
+    return byteInstruction("OP_GET_UPVALUE", chunk, offset)
   of uint8(OP_SET_UPVALUE):
-    return constantInstruction("OP_SET_UPVALUE", chunk, offset)
+    return byteInstruction("OP_SET_UPVALUE", chunk, offset)
   of uint8(OP_EQUAL):
     return simpleInstruction("OP_EQUAL", offset)
   of uint8(OP_GREATER):
@@ -112,7 +112,6 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
   of uint8(OP_CALL):
     return byteInstruction("OP_CALL", chunk, offset)
   of uint8(OP_CLOSURE):
-    echo "akii"
     var offset = offset + 1
 
     let constant = chunk.code[offset]
@@ -138,7 +137,7 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
 
       let isLocalStr = if bool(isLocal): "local" else: "upvalue"
 
-      write(stdout, fmt"{offset - 2:04}      |                     {isLocalStr} {index}\n")
+      write(stdout, fmt"{offset - 2:04}      |                     {isLocalStr} {index}{'\n'}")
     return offset
   of uint8(OP_CLOSE_UPVALUE):
     return simpleInstruction("OP_CLOSE_UPVALUE", offset)
