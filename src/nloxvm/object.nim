@@ -7,6 +7,9 @@ import ./private/pointer_arithmetics
 template objType*(value: Value): ObjType =
   asObj(value).`type`
 
+template isClosure*(value: Value): bool =
+  isObjType(value, OBJT_CLOSURE)
+
 template isFunction*(value: Value): bool =
   isObjType(value, OBJT_FUNCTION)
 
@@ -15,6 +18,9 @@ template isNative*(value: Value): bool =
 
 template isString*(value: Value): bool =
   isObjType(value, OBJT_STRING)
+
+template asClosure*(value: Value): ptr ObjClosure =
+  cast[ptr ObjClosure](asObj(value))
 
 template asFunction*(value: Value): ptr ObjFunction =
   cast[ptr ObjFunction](asObj(value))
@@ -40,9 +46,21 @@ proc allocateObject(size: int, `type`: ObjType): ptr Obj =
   result.next = vm.objects
   vm.objects = result
 
+proc newClosure*(function: ptr ObjFunction): ptr ObjClosure =
+  var upvalues = allocate(ptr ObjUpvalue, function.upvalueCount)
+
+  for i in 0 ..< function.upvalueCount:
+    upvalues[i] = nil
+
+  result = allocate_obj(ObjClosure, OBJT_CLOSURE)
+  result.function = function
+  result.upvalues = upvalues
+  result.upvalueCount = function.upvalueCount
+
 proc newFunction*(): ptr ObjFunction =
   result = allocate_obj(ObjFunction, OBJT_FUNCTION)
   result.arity = 0
+  result.upvalueCount = 0
   result.name = nil
 
   initChunk(result.chunk)
@@ -93,6 +111,12 @@ proc copyString*(chars: ptr char, length: int32): ptr ObjString =
 
   allocateString(heapChars, length, hash)
 
+proc newUpvalue*(slot: ptr Value): ptr ObjUpvalue =
+  result = allocate_obj(ObjUpvalue, OBJT_UPVALUE)
+  result.location = slot
+  result.closed = nilVal()
+  result.next = nil
+
 proc printFunction(function: ptr ObjFunction) =
   if isNil(function.name):
     write(stdout, "<script>")
@@ -102,17 +126,27 @@ proc printFunction(function: ptr ObjFunction) =
 
 proc printObject*(value: Value) =
   case objType(value)
+  of OBJT_CLOSURE:
+    printFunction(asClosure(value).function)
   of OBJT_FUNCTION:
     printFunction(asFunction(value))
   of OBJT_NATIVE:
     write(stdout, "<native fn>")
   of OBJT_STRING:
     write(stdout, cast[cstring](asCString(value)))
+  of OBJT_UPVALUE:
+    write(stdout, "upvalue")
 
 # memory.nim
 
 proc freeObject(`object`: ptr Obj) =
   case `object`.`type`
+  of OBJT_CLOSURE:
+    let closure = cast[ptr ObjClosure](`object`)
+
+    free_array(ptr ObjUpvalue, closure.upvalues, closure.upvalueCount)
+
+    free(ObjClosure, `object`)
   of OBJT_FUNCTION:
     let function = cast[ptr ObjFunction](`object`)
 
@@ -127,6 +161,8 @@ proc freeObject(`object`: ptr Obj) =
     free_array(char, string.chars, string.length + 1)
 
     free(ObjString, `object`)
+  of OBJT_UPVALUE:
+    free(ObjUpvalue, `object`)
 
 proc freeObjects*() =
   var `object` = vm.objects

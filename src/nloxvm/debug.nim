@@ -1,6 +1,6 @@
 import std/strformat
 
-import ./printer, ./types
+import ./object, ./printer, ./types
 
 import ./private/pointer_arithmetics
 
@@ -79,6 +79,10 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return constantInstruction("OP_DEFINE_GLOBAL", chunk, offset)
   of uint8(OP_SET_GLOBAL):
     return constantInstruction("OP_SET_GLOBAL", chunk, offset)
+  of uint8(OP_GET_UPVALUE):
+    return constantInstruction("OP_GET_UPVALUE", chunk, offset)
+  of uint8(OP_SET_UPVALUE):
+    return constantInstruction("OP_SET_UPVALUE", chunk, offset)
   of uint8(OP_EQUAL):
     return simpleInstruction("OP_EQUAL", offset)
   of uint8(OP_GREATER):
@@ -107,6 +111,37 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return jumpInstruction("OP_LOOP", -1, chunk, offset)
   of uint8(OP_CALL):
     return byteInstruction("OP_CALL", chunk, offset)
+  of uint8(OP_CLOSURE):
+    echo "akii"
+    var offset = offset + 1
+
+    let constant = chunk.code[offset]
+
+    inc(offset)
+
+    write(stdout, fmt"""{"OP_CLOSURE": <16} {constant: >4} """)
+
+    printValue(chunk.constants.values[constant])
+
+    write(stdout, '\n')
+
+    let function = asFunction(chunk.constants.values[constant])
+
+    for j in 0 ..< function.upvalueCount:
+      let isLocal = chunk.code[offset]
+
+      inc(offset)
+
+      let index = chunk.code[offset]
+
+      inc(offset)
+
+      let isLocalStr = if bool(isLocal): "local" else: "upvalue"
+
+      write(stdout, fmt"{offset - 2:04}      |                     {isLocalStr} {index}\n")
+    return offset
+  of uint8(OP_CLOSE_UPVALUE):
+    return simpleInstruction("OP_CLOSE_UPVALUE", offset)
   of uint8(OP_RETURN):
     return simpleInstruction("OP_RETURN", offset)
   else:

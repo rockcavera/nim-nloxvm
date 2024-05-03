@@ -162,6 +162,7 @@ proc initCompiler(compiler: var Compiler, `type`: FunctionType) =
   inc(current.localCount)
 
   local.depth = 0
+  local.isCaptured = false
   local.name.start = cast[ptr char](cstring"")
   local.name.length = 0
 
@@ -185,7 +186,10 @@ proc endScope() =
   dec(current.scopeDepth)
 
   while (current.localCount > 0) and (current.locals[current.localCount - 1].depth > current.scopeDepth):
-    emitByte(OP_POP)
+    if current.locals[current.localCount - 1].isCaptured:
+      emitByte(OP_CLOSE_UPVALUE)
+    else:
+      emitByte(OP_POP)
 
     dec(current.localCount)
 
@@ -216,6 +220,43 @@ proc resolveLocal(compiler: ptr Compiler, name: Token): int32 =
 
   -1
 
+proc addUpvalue(compiler: ptr Compiler, index: uint8, isLocal: bool): int32 =
+  let upvalueCount = compiler.function.upvalueCount
+
+  for i in 0'i32 ..< upvalueCount:
+    let upvalue = compiler.upvalues[i]
+
+    if upvalue.index == index and upvalue.isLocal == isLocal:
+      return i
+
+  if upvalueCount == UINT8_COUNT:
+    error("Too many closure variables in function.")
+    return 0
+
+  compiler.upvalues[upvalueCount].isLocal = isLocal
+  compiler.upvalues[upvalueCount].index = index
+
+  inc(compiler.function.upvalueCount)
+
+  return upvalueCount
+
+proc resolveUpvalue(compiler: ptr Compiler, name: Token): int32 =
+  if isNil(compiler.enclosing):
+    return -1
+
+  let local = resolveLocal(compiler.enclosing, name)
+
+  if local != -1:
+    compiler.enclosing.locals[local].isCaptured = true
+    return addUpvalue(compiler, uint8(local), true)
+
+  let upvalue = resolveUpvalue(compiler.enclosing, name)
+
+  if upvalue != -1:
+    return addUpvalue(compiler, uint8(upvalue), false)
+
+  -1
+
 proc addLocal(name: Token) =
   if current.localCount == UINT8_COUNT:
     error("Too many local variables in function.")
@@ -229,6 +270,7 @@ proc addLocal(name: Token) =
 
   local.name = name
   local.depth = -1
+  local.isCaptured = false
 
 proc declareVariable() =
   if current.scopeDepth == 0:
@@ -379,9 +421,15 @@ proc namedVariable(name: Token, canAssign: bool) =
     getOp = OP_GET_LOCAL
     setOp = OP_SET_LOCAL
   else:
-    arg = identifierConstant(name).int32
-    getOp = OP_GET_GLOBAL
-    setOp = OP_SET_GLOBAL
+    arg = resolveUpvalue(current, name)
+
+    if arg != -1:
+      getOp = OP_GET_UPVALUE
+      setOp = OP_SET_UPVALUE
+    else:
+      arg = identifierConstant(name).int32
+      getOp = OP_GET_GLOBAL
+      setOp = OP_SET_GLOBAL
 
   if canAssign and match(TOKEN_EQUAL):
     expression()
@@ -514,7 +562,11 @@ proc function(`type`: FunctionType) =
 
   let function = endCompiler()
 
-  emitBytes(OP_CONSTANT, makeConstant(objVal(cast[ptr Obj](function))))
+  emitBytes(OP_CLOSURE, makeConstant(objVal(cast[ptr Obj](function))))
+
+  for i in 0 ..< function.upvalueCount:
+    emitByte(if compiler.upvalues[i].isLocal: 1 else: 0)
+    emitByte(compiler.upvalues[i].index)
 
 proc funDeclaration() =
   let global = parseVariable("Expect function name.")

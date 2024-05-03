@@ -16,6 +16,7 @@ proc clockNative(argCount: int32, args: ptr Value): Value =
 proc resetStack() =
   vm.stackTop = cast[ptr Value](addr vm.stack[0])
   vm.frameCount = 0
+  vm.openUpvalues = nil
 
 proc runtimeError(format: string, args: varargs[string, `$`]) =
   if len(args) > 0:
@@ -26,7 +27,7 @@ proc runtimeError(format: string, args: varargs[string, `$`]) =
   for i in countdown(vm.frameCount - 1, 0):
     let
       frame = cast[ptr CallFrame](addr vm.frames[i])
-      function = frame.function
+      function = frame.closure.function
       instruction = frame.ip - function.chunk.code - 1
 
     write(stderr, "[line $1] in " % $function.chunk.lines[instruction])
@@ -74,9 +75,9 @@ proc pop(): Value =
 proc peek(distance: int32): Value =
   vm.stackTop[-1 - distance]
 
-proc call(function: ptr ObjFunction, argCount: int32): bool =
-  if argCount != function.arity:
-    runtimeError("Expected $1 arguments but got $2.", function.arity, argCount)
+proc call(closure: ptr ObjClosure, argCount: int32): bool =
+  if argCount != closure.function.arity:
+    runtimeError("Expected $1 arguments but got $2.", closure.function.arity, argCount)
     return false
 
   if vm.frameCount == FRAMES_MAX:
@@ -87,8 +88,8 @@ proc call(function: ptr ObjFunction, argCount: int32): bool =
 
   inc(vm.frameCount)
 
-  frame.function = function
-  frame.ip = function.chunk.code
+  frame.closure = closure
+  frame.ip = closure.function.chunk.code
   frame.slots = vm.stackTop - argCount - 1
 
   return true
@@ -96,8 +97,8 @@ proc call(function: ptr ObjFunction, argCount: int32): bool =
 proc callValue(callee: Value, argCount: int32): bool =
   if isObj(callee):
     case objType(callee)
-    of OBJT_FUNCTION:
-      return call(asFunction(callee), argCount)
+    of OBJT_CLOSURE:
+      return call(asClosure(callee), argCount)
     of OBJT_NATIVE:
       let
         native = asNative(callee)
@@ -114,6 +115,36 @@ proc callValue(callee: Value, argCount: int32): bool =
   runtimeError("Can only call functions and classes.")
 
   return false
+
+proc captureUpvalue(local: ptr Value): ptr ObjUpvalue =
+  var
+    prevUpvalue: ptr ObjUpvalue = nil
+    upvalue = vm.openUpvalues
+
+  while not(isNil(upvalue)) and upvalue.location > local:
+    prevUpvalue = upvalue
+    upvalue = upvalue.next
+
+  if not(isNil(upvalue)) and upvalue.location == local:
+    return upvalue
+
+  result = newUpvalue(local)
+
+  result.next = upvalue
+
+  if isNil(prevUpvalue):
+    vm.openUpvalues = result
+  else:
+    prevUpvalue.next = result
+
+proc closeUpvalues(last: ptr Value) =
+  while not(isNil(vm.openUpvalues)) and vm.openUpvalues.location >= last:
+    var upvalue = vm.openUpvalues
+
+    upvalue.closed = upvalue.location[]
+    upvalue.location = addr upvalue.closed
+
+    vm.openUpvalues = upvalue.next
 
 proc isFalsey(value: Value): bool =
   isNil(value) or (isBool(value) and not(asBool(value)))
@@ -149,7 +180,7 @@ template readShort(): uint16 =
   tmp
 
 template readConstant(): Value =
-  frame.function.chunk.constants.values[readByte()]
+  frame.closure.function.chunk.constants.values[readByte()]
 
 template readString(): ptr ObjString =
   asString(readConstant())
@@ -179,7 +210,7 @@ proc run(): InterpretResult =
 
       write(stdout, '\n')
 
-      discard disassembleInstruction(frame.function.chunk[], int32(frame.ip - frame.function.chunk.code))
+      discard disassembleInstruction(frame.closure.function.chunk, int32(frame.ip - frame.closure.function.chunk.code))
 
     let instruction = readByte()
 
@@ -224,6 +255,14 @@ proc run(): InterpretResult =
 
         runtimeError("Undefined variable '$1'.", cast[cstring](name.chars))
         return INTERPRET_RUNTIME_ERROR
+    of uint8(OP_GET_UPVALUE):
+      let slot = readByte()
+
+      push(frame.closure.upvalues[slot].location[])
+    of uint8(OP_SET_UPVALUE):
+      let slot = readByte()
+
+      frame.closure.upvalues[slot].location[] = peek(0)
     of uint8(OP_EQUAL):
       let
         b = pop()
@@ -282,8 +321,30 @@ proc run(): InterpretResult =
         return INTERPRET_RUNTIME_ERROR
 
       frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+    of uint8(OP_CLOSURE):
+      let function = asFunction(readConstant())
+
+      var closure = newClosure(function)
+
+      push(objVal(cast[ptr Obj](closure)))
+
+      for i in 0 ..< closure.upvalueCount:
+        let
+          isLocal = readByte()
+          index = readByte()
+
+        if bool(isLocal):
+          closure.upvalues[i] = captureUpvalue(frame.slots + index)
+        else:
+          closure.upvalues[i] = frame.closure.upvalues[index]
+    of uint8(OP_CLOSE_UPVALUE):
+      closeUpvalues(vm.stackTop - 1)
+
+      discard pop()
     of uint8(OP_RETURN):
       let res = pop()
+
+      closeUpvalues(frame.slots)
 
       dec(vm.frameCount)
 
@@ -307,6 +368,12 @@ proc interpret*(source: var string): InterpretResult =
 
   push(objVal(cast[ptr Obj](function)))
 
-  discard call(function, 0)
+  let closure = newClosure(function)
+
+  discard pop()
+
+  push(objVal(cast[ptr Obj](closure)))
+
+  discard call(closure, 0)
 
   run()

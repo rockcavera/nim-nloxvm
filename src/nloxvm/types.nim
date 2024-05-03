@@ -18,6 +18,8 @@ type
     OP_GET_GLOBAL,
     OP_DEFINE_GLOBAL,
     OP_SET_GLOBAL,
+    OP_GET_UPVALUE,
+    OP_SET_UPVALUE,
     OP_EQUAL,
     OP_GREATER,
     OP_LESS,
@@ -32,6 +34,8 @@ type
     OP_JUMP_IF_FALSE,
     OP_LOOP,
     OP_CALL,
+    OP_CLOSURE,
+    OP_CLOSE_UPVALUE,
     OP_RETURN
 
   Chunk* = object
@@ -74,6 +78,11 @@ type
   Local* = object
     name*: Token
     depth*: int32
+    isCaptured*: bool
+
+  Upvalue* = object
+    index*: uint8
+    isLocal*: bool
 
   FunctionType* = enum
     TYPE_FUNCTION,
@@ -85,6 +94,7 @@ type
     `type`*: FunctionType
     locals*: array[UINT8_COUNT, Local]
     localCount*: int32
+    upvalues*: array[UINT8_COUNT, Upvalue]
     scopeDepth*: int32
 
   # end
@@ -92,9 +102,11 @@ type
   # object.nim
 
   ObjType* = enum
+    OBJT_CLOSURE,
     OBJT_FUNCTION,
     OBJT_NATIVE,
-    OBJT_STRING
+    OBJT_STRING,
+    OBJT_UPVALUE
 
   Obj* = object
     `type`*: ObjType
@@ -103,6 +115,7 @@ type
   ObjFunction* = object
     obj*: Obj
     arity*: int32
+    upvalueCount*: int32
     chunk*: Chunk
     name*: ptr ObjString
 
@@ -117,6 +130,18 @@ type
     length*: int32
     chars*: ptr char
     hash*: uint32
+
+  ObjUpvalue* = object
+    obj*: Obj
+    location*: ptr Value
+    closed*: Value
+    next*: ptr ObjUpvalue
+
+  ObjClosure* = object
+    obj*: Obj
+    function*: ptr ObjFunction
+    upvalues*: ptr ptr ObjUpvalue
+    upvalueCount*: int32
 
   # end
 
@@ -209,7 +234,7 @@ type
   # vm.nim
 
   CallFrame* = object
-    function*: ptr ObjFunction
+    closure*: ptr ObjClosure
     ip*: ptr uint8
     slots*: ptr Value
 
@@ -221,6 +246,7 @@ type
     stackTop*: ptr Value
     globals*: Table
     strings*: Table
+    openUpvalues*: ptr ObjUpvalue
     objects*: ptr Obj
 
   InterpretResult* = enum
