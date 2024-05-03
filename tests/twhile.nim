@@ -55,3 +55,23 @@ suite "While":
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Closure in body":
+    const
+      script = folder / "closure_in_body.lox"
+      expectedExitCode = 0
+      expectedOutput = """1
+2
+3
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Return closure":
+    const
+      script = folder / "return_closure.lox"
+      expectedExitCode = 0
+      expectedOutput = """i
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

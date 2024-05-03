@@ -114,3 +114,12 @@ suite "Limit":
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Too many upvalues":
+    const
+      script = folder / "too_many_upvalues.lox"
+      expectedExitCode = 65
+      expectedOutput = """[line 102] Error at 'oops': Too many closure variables in function.
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

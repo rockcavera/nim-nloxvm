@@ -138,3 +138,12 @@ true
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Local recursion":
+    const
+      script = folder / "local_recursion.lox"
+      expectedExitCode = 0
+      expectedOutput = """21
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

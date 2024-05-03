@@ -104,3 +104,26 @@ done
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Closure in body":
+    const
+      script = folder / "closure_in_body.lox"
+      expectedExitCode = 0
+      expectedOutput = """4
+1
+4
+2
+4
+3
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Return closure":
+    const
+      script = folder / "return_closure.lox"
+      expectedExitCode = 0
+      expectedOutput = """i
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
