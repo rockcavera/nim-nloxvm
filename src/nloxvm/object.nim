@@ -1,4 +1,5 @@
-import std/strformat
+when defined(DEBUG_LOG_GC):
+  import std/strformat
 
 import ./chunk, ./globals, ./memory, ./table, ./types, ./value_helpers, ./vm_ops
 
