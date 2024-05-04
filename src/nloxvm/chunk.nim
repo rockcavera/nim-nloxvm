@@ -1,4 +1,4 @@
-import ./memory, ./value, ./types
+import ./memory, ./value, ./types, ./vm_impl
 
 import ./private/pointer_arithmetics
 
@@ -35,5 +35,9 @@ template writeChunk*(chunk: var Chunk, value: int32, line: int32) =
   writeChunk(chunk, uint8(value), line)
 
 proc addConstant*(chunk: var Chunk, value: Value): int32 =
+  push(value)
+
   writeValueArray(chunk.constants, value)
+
+  discard pop()
   return chunk.constants.count - 1

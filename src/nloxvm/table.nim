@@ -125,3 +125,17 @@ proc tableFindString*(table: var Table, chars: ptr char, length: int32, hash: ui
       return entry.key
 
     index = (index + 1) mod uint32(table.capacity)
+
+proc tableRemoveWhite*(table: var Table) =
+  for i in 0 ..< table.capacity:
+    let entry = addr table.entries[i]
+
+    if not(isNil(entry.key)) and not(entry.key.obj.isMarked):
+      discard tableDelete(table, entry.key)
+
+proc markTable*(table: var Table) =
+  for i in 0 ..< table.capacity:
+    let entry = addr table.entries[i]
+
+    markObject(cast[ptr Obj](entry.key))
+    markValue(entry.value)

@@ -1,6 +1,6 @@
 import std/[parseutils, strformat]
 
-import ./chunk, ./common, ./object, ./scanner, ./value, ./types
+import ./chunk, ./common, ./memory, ./object, ./scanner, ./value, ./types
 
 when defined(DEBUG_PRINT_CODE):
   import ./debug
@@ -778,3 +778,11 @@ proc compile*(source: var string): ptr ObjFunction =
   let function = endCompiler()
 
   return if parser.hadError: nil else: function
+
+proc markCompilerRoots*() =
+  var compiler = current
+
+  while not isNil(compiler):
+    markObject(cast[ptr Obj](compiler.function))
+
+    compiler = compiler.enclosing

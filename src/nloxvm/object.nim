@@ -1,5 +1,7 @@
 import std/strformat
 
+import system/ansi_c
+
 import ./chunk, ./globals, ./memory, ./value, ./table, ./types
 
 import ./private/pointer_arithmetics
@@ -43,8 +45,12 @@ template allocate_obj[T](`type`: typedesc[T], objectType: ObjType): ptr T =
 proc allocateObject(size: int, `type`: ObjType): ptr Obj =
   result = cast[ptr Obj](reallocate(nil, 0, size))
   result.`type` = `type`
+  result.isMarked = false
   result.next = vm.objects
   vm.objects = result
+
+  when defined(DEBUG_LOG_GC):
+    write(stdout, fmt"{cast[uint](result)} allocate {size} for {ord(`type`)}\n")
 
 proc newClosure*(function: ptr ObjFunction): ptr ObjClosure =
   var upvalues = allocate(ptr ObjUpvalue, function.upvalueCount)
@@ -75,7 +81,11 @@ proc allocateString(chars: ptr char, length: int32, hash: uint32): ptr ObjString
   result.chars = chars
   result.hash = hash
 
+  push(objVal(cast[ptr Obj](result)))
+
   discard tableSet(vm.strings, result, nilVal())
+
+  discard pop()
 
 proc hashString(key: ptr char, length: int32): uint32 =
   result = 2166136261'u32
@@ -139,7 +149,10 @@ proc printObject*(value: Value) =
 
 # memory.nim
 
-proc freeObject(`object`: ptr Obj) =
+proc freeObject*(`object`: ptr Obj) =
+  when defined(DEBUG_LOG_GC):
+    write(stdout, fmt"{cast[uint](`object`)} free type {ord(`object`.`type`)}\n")
+
   case `object`.`type`
   of OBJT_CLOSURE:
     let closure = cast[ptr ObjClosure](`object`)
@@ -173,5 +186,7 @@ proc freeObjects*() =
     freeObject(`object`)
 
     `object` = next
+
+  c_free(vm.grayStack)
 
 # end

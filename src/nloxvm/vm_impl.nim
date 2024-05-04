@@ -52,6 +52,12 @@ proc initVM*() =
   resetStack()
 
   vm.objects = nil
+  vm.bytesAllocated = 0
+  vm.nextGV = 1024 * 1024
+
+  vm.grayCount = 0
+  vm.grayCapacity = 0
+  vm.grayStack = nil
 
   initTable(vm.globals)
   initTable(vm.strings)
@@ -64,11 +70,11 @@ proc freeVM*() =
 
   freeObjects()
 
-proc push(value: Value) =
+proc push*(value: Value) =
   vm.stackTop[] = value
   vm.stackTop += 1
 
-proc pop(): Value =
+proc pop*(): Value =
   vm.stackTop -= 1
   return vm.stackTop[]
 
@@ -151,8 +157,8 @@ proc isFalsey(value: Value): bool =
 
 proc concatenate() =
   let
-    b = asString(pop())
-    a = asString(pop())
+    b = asString(peek(0))
+    a = asString(peek(1))
     length = a.length + b.length
     chars = allocate(char, length + 1)
 
@@ -162,6 +168,9 @@ proc concatenate() =
   chars[length] = '\0'
 
   var result = takeString(chars, length)
+
+  discard pop()
+  discard pop()
 
   push(objVal(cast[ptr Obj](result)))
 

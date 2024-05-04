@@ -110,6 +110,7 @@ type
 
   Obj* = object
     `type`*: ObjType
+    isMarked*: bool
     next*: ptr Obj
 
   ObjFunction* = object
@@ -247,7 +248,13 @@ type
     globals*: Table
     strings*: Table
     openUpvalues*: ptr ObjUpvalue
+
+    bytesAllocated*: int # uint
+    nextGC*: int # uint
     objects*: ptr Obj
+    grayCount*: int32
+    grayCapacity*: int32
+    grayStack*: ptr ptr Obj
 
   InterpretResult* = enum
     INTERPRET_OK,
