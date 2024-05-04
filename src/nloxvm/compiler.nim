@@ -1,6 +1,6 @@
 import std/[parseutils, strformat]
 
-import ./chunk, ./common, ./memory, ./object, ./scanner, ./value, ./types
+import ./chunk, ./common, ./globals, ./object, ./scanner, ./types, ./value_helpers
 
 when defined(DEBUG_PRINT_CODE):
   import ./debug
@@ -9,9 +9,7 @@ import ./private/pointer_arithmetics
 
 const UINT16_MAX = high(uint16).int32
 
-var
-  parser: Parser
-  current: ptr Compiler
+var parser: Parser
 
 template lexeme(token: Token): openArray[char] =
   toOpenArray(cast[cstring](token.start), 0, token.length - 1)
@@ -778,11 +776,3 @@ proc compile*(source: var string): ptr ObjFunction =
   let function = endCompiler()
 
   return if parser.hadError: nil else: function
-
-proc markCompilerRoots*() =
-  var compiler = current
-
-  while not isNil(compiler):
-    markObject(cast[ptr Obj](compiler.function))
-
-    compiler = compiler.enclosing

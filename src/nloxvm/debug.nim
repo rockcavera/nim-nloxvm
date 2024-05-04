@@ -1,6 +1,6 @@
 import std/strformat
 
-import ./object, ./printer, ./types
+import ./object_helpers, ./printer, ./types
 
 import ./private/pointer_arithmetics
 

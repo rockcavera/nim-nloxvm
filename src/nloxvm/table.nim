@@ -1,4 +1,4 @@
-import ./memory, ./types, ./value
+import ./memory, ./types, ./value_helpers
 
 import ./private/pointer_arithmetics
 
@@ -132,10 +132,3 @@ proc tableRemoveWhite*(table: var Table) =
 
     if not(isNil(entry.key)) and not(entry.key.obj.isMarked):
       discard tableDelete(table, entry.key)
-
-proc markTable*(table: var Table) =
-  for i in 0 ..< table.capacity:
-    let entry = addr table.entries[i]
-
-    markObject(cast[ptr Obj](entry.key))
-    markValue(entry.value)

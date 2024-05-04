@@ -1,10 +1,34 @@
 import std/strformat
 
-import ./object, ./types, ./value
+import ./object_helpers, ./types, ./value_helpers
+
+# object.nim
+
+proc printFunction(function: ptr ObjFunction) =
+  if isNil(function.name):
+    write(stdout, "<script>")
+    return
+
+  write(stdout, fmt"<fn {cast[cstring](function.name.chars)}>")
+
+proc printObject(value: Value) =
+  case objType(value)
+  of OBJT_CLOSURE:
+    printFunction(asClosure(value).function)
+  of OBJT_FUNCTION:
+    printFunction(asFunction(value))
+  of OBJT_NATIVE:
+    write(stdout, "<native fn>")
+  of OBJT_STRING:
+    write(stdout, cast[cstring](asCString(value)))
+  of OBJT_UPVALUE:
+    write(stdout, "upvalue")
+
+# end
 
 # value.nim
 
-proc printValue*(value: Value) =
+proc printValue*(value: Value) {.exportc.} =
   case value.`type`
   of VAL_BOOL:
     write(stdout, $asBool(value))

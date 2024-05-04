@@ -1,4 +1,4 @@
-import ./memory, ./value, ./types, ./vm_impl
+import ./memory, ./value, ./types, ./vm_ops
 
 import ./private/pointer_arithmetics
 
@@ -10,7 +10,7 @@ proc initChunk*(chunk: var Chunk) =
 
   initValueArray(chunk.constants)
 
-proc freeChunk*(chunk: var Chunk) =
+proc freeChunk*(chunk: var Chunk) {.exportc.} =
   free_array(uint8, chunk.code, chunk.capacity)
   free_array(int32, chunk.lines, chunk.capacity)
   freeValueArray(chunk.constants)

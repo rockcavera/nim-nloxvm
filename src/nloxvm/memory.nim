@@ -1,16 +1,17 @@
-import std/strformat
-
 import system/ansi_c
 
-import ./compiler, ./globals, ./printer, ./table, ./types, ./value
+import ./globals, ./types, ./value_helpers
 
 when defined(DEBUG_LOG_GC):
-  import ./debug # importação cíclica
+  import std/strformat
+
+  import ./printer
 
 import ./private/pointer_arithmetics
 
 const GC_HEAP_GROW_FACTOR {.intdefine.} = 2
 
+proc freeChunk(chunk: var Chunk) {.importc.}
 proc collectGarbage*()
 
 template allocate*[T](`type`: typedesc[T], count: untyped): ptr T =
@@ -110,6 +111,57 @@ proc blackenObject(`object`: ptr Obj) =
   of OBJT_NATIVE, OBJT_STRING:
     discard
 
+proc freeObject*(`object`: ptr Obj) =
+  when defined(DEBUG_LOG_GC):
+    write(stdout, fmt"{cast[uint](`object`)} free type {ord(`object`.`type`)}{'\n'}")
+
+  case `object`.`type`
+  of OBJT_CLOSURE:
+    let closure = cast[ptr ObjClosure](`object`)
+
+    free_array(ptr ObjUpvalue, closure.upvalues, closure.upvalueCount)
+
+    free(ObjClosure, `object`)
+  of OBJT_FUNCTION:
+    let function = cast[ptr ObjFunction](`object`)
+
+    freeChunk(function.chunk)
+
+    free(ObjFunction, `object`)
+  of OBJT_NATIVE:
+    free(ObjNative, `object`)
+  of OBJT_STRING:
+    let string = cast[ptr ObjString](`object`)
+
+    free_array(char, string.chars, string.length + 1)
+
+    free(ObjString, `object`)
+  of OBJT_UPVALUE:
+    free(ObjUpvalue, `object`)
+
+# table.nim
+
+proc markTable(table: var Table) =
+  for i in 0 ..< table.capacity:
+    let entry = addr table.entries[i]
+
+    markObject(cast[ptr Obj](entry.key))
+    markValue(entry.value)
+
+# end
+
+# compiler.nim
+
+proc markCompilerRoots() =
+  var compiler = current
+
+  while not isNil(compiler):
+    markObject(cast[ptr Obj](compiler.function))
+
+    compiler = compiler.enclosing
+
+# end
+
 proc markRoots() =
   for slot in cast[ptr Value](addr vm.stack) ..< vm.stackTop:
     markValue(slot[])
@@ -158,6 +210,8 @@ proc sweep() =
 
       freeObject(unreached)
 
+from ./table import tableRemoveWhite
+
 proc collectGarbage*() =
   when defined(DEBUG_LOG_GC):
     write(stdout, "-- gc begin\n")
@@ -177,3 +231,15 @@ proc collectGarbage*() =
   when defined(DEBUG_LOG_GC):
     write(stdout, "-- gc end\n")
     write(stdout, fmt"   collected {before - vm.bytesAllocated} bytes (from {before} to {vm.bytesAllocated}) next at {vm.nextGC}{'\n'}")
+
+proc freeObjects*() =
+  var `object` = vm.objects
+
+  while `object` != nil:
+    let next = `object`.next
+
+    freeObject(`object`)
+
+    `object` = next
+
+  c_free(vm.grayStack)

@@ -1,14 +1,11 @@
 import std/[strformat, strutils, times]
 
-import ./compiler, ./globals, ./memory, ./object, ./printer, ./table, ./types, ./value
+import ./compiler, ./globals, ./memory, ./object, ./object_helpers, ./printer, ./table, ./types, ./value, ./value_helpers, ./vm_ops
 
 when defined(DEBUG_TRACE_EXECUTION):
   import ./debug
 
 import ./private/pointer_arithmetics
-
-proc push(value: Value)
-proc pop(): Value
 
 proc clockNative(argCount: int32, args: ptr Value): Value =
   numberVal(cpuTime())
@@ -53,7 +50,7 @@ proc initVM*() =
 
   vm.objects = nil
   vm.bytesAllocated = 0
-  vm.nextGV = 1024 * 1024
+  vm.nextGC = 1024 * 1024
 
   vm.grayCount = 0
   vm.grayCapacity = 0
@@ -69,14 +66,6 @@ proc freeVM*() =
   freeTable(vm.strings)
 
   freeObjects()
-
-proc push*(value: Value) =
-  vm.stackTop[] = value
-  vm.stackTop += 1
-
-proc pop*(): Value =
-  vm.stackTop -= 1
-  return vm.stackTop[]
 
 proc peek(distance: int32): Value =
   vm.stackTop[-1 - distance]

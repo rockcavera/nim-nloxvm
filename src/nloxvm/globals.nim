@@ -1,3 +1,5 @@
 import ./types
 
-var vm*: VM
+var
+  current*: ptr Compiler
+  vm*: VM
