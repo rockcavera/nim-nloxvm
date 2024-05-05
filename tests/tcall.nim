@@ -45,3 +45,13 @@ suite "Call":
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Object":
+    const
+      script = folder / "object.lox"
+      expectedExitCode = 70
+      expectedOutput = """Can only call functions and classes.
+[line 4] in script
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

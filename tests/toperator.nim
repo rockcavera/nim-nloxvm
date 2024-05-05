@@ -330,3 +330,29 @@ true
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Not class":
+    const
+      script = folder / "not_class.lox"
+      expectedExitCode = 0
+      expectedOutput = """false
+false
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Not":
+    const
+      script = folder / "not.lox"
+      expectedExitCode = 0
+      expectedOutput = """false
+true
+true
+false
+false
+true
+false
+false
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
