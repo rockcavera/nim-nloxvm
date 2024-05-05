@@ -20,6 +20,8 @@ type
     OP_SET_GLOBAL,
     OP_GET_UPVALUE,
     OP_SET_UPVALUE,
+    OP_GET_PROPERTY,
+    OP_SET_PROPERTY,
     OP_EQUAL,
     OP_GREATER,
     OP_LESS,
@@ -36,7 +38,8 @@ type
     OP_CALL,
     OP_CLOSURE,
     OP_CLOSE_UPVALUE,
-    OP_RETURN
+    OP_RETURN,
+    OP_CLASS
 
   Chunk* = object
     count*: int32
@@ -102,8 +105,10 @@ type
   # object.nim
 
   ObjType* = enum
+    OBJT_CLASS,
     OBJT_CLOSURE,
     OBJT_FUNCTION,
+    OBJT_INSTANCE,
     OBJT_NATIVE,
     OBJT_STRING,
     OBJT_UPVALUE
@@ -143,6 +148,15 @@ type
     function*: ptr ObjFunction
     upvalues*: ptr ptr ObjUpvalue
     upvalueCount*: int32
+
+  ObjClass* = object
+    obj*: Obj
+    name*: ptr ObjString
+
+  ObjInstance* = object
+    obj*: Obj
+    klass*: ptr ObjClass
+    fields*: Table
 
   # end
 

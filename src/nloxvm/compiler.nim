@@ -370,6 +370,18 @@ proc call(canAssign: bool) =
 
   emitBytes(OP_CALL, argCount)
 
+proc dot(canAssign: bool) =
+  consume(TOKEN_IDENTIFIER, "Expect property name after '.'.")
+
+  let name = identifierConstant(parser.previous)
+
+  if canAssign and match(TOKEN_EQUAL):
+    expression()
+
+    emitBytes(OP_SET_PROPERTY, name)
+  else:
+    emitBytes(OP_GET_PROPERTY, name)
+
 proc literal(canAssign: bool) =
   case parser.previous.`type`
   of TOKEN_FALSE:
@@ -458,7 +470,7 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_LEFT_BRACE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RIGHT_BRACE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_COMMA
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_DOT
+  ParseRule(prefix: nil, infix: dot, precedence: PREC_CALL),      # TOKEN_DOT
   ParseRule(prefix: unary, infix: binary, precedence: PREC_TERM), # TOKEN_MINUS
   ParseRule(prefix: nil, infix: binary, precedence: PREC_TERM),   # TOKEN_PLUS
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_SEMICOLON
@@ -565,6 +577,20 @@ proc function(`type`: FunctionType) =
   for i in 0 ..< function.upvalueCount:
     emitByte(if compiler.upvalues[i].isLocal: 1 else: 0)
     emitByte(compiler.upvalues[i].index)
+
+proc classDeclaration() =
+  consume(TOKEN_IDENTIFIER, "Expect class name.")
+
+  let nameConstant = identifierConstant(parser.previous)
+
+  declareVariable()
+
+  emitBytes(OP_CLASS, nameConstant)
+
+  defineVariable(nameConstant)
+
+  consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.")
+  consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.")
 
 proc funDeclaration() =
   let global = parseVariable("Expect function name.")
@@ -728,7 +754,9 @@ proc synchronize() =
     advance()
 
 proc declaration() =
-  if match(TOKEN_FUN):
+  if match(TOKEN_CLASS):
+    classDeclaration()
+  elif match(TOKEN_FUN):
     funDeclaration()
   elif match(TOKEN_VAR):
     varDeclaration()

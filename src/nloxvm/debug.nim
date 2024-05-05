@@ -83,6 +83,10 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return byteInstruction("OP_GET_UPVALUE", chunk, offset)
   of uint8(OP_SET_UPVALUE):
     return byteInstruction("OP_SET_UPVALUE", chunk, offset)
+  of uint8(OP_GET_PROPERTY):
+    return constantInstruction("OP_GET_PROPERTY", chunk, offset)
+  of uint8(OP_SET_PROPERTY):
+    return constantInstruction("OP_SET_PROPERTY", chunk, offset)
   of uint8(OP_EQUAL):
     return simpleInstruction("OP_EQUAL", offset)
   of uint8(OP_GREATER):
@@ -143,6 +147,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return simpleInstruction("OP_CLOSE_UPVALUE", offset)
   of uint8(OP_RETURN):
     return simpleInstruction("OP_RETURN", offset)
+  of uint8(OP_CLASS):
+    return constantInstruction("OP_CLASS", chunk, offset)
   else:
     write(stdout, fmt"Unknown opcode {instruction}{'\n'}")
     return offset + 1

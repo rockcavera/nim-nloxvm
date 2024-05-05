@@ -92,6 +92,11 @@ proc call(closure: ptr ObjClosure, argCount: int32): bool =
 proc callValue(callee: Value, argCount: int32): bool =
   if isObj(callee):
     case objType(callee)
+    of OBJT_CLASS:
+      let klass = asClass(callee)
+
+      vm.stackTop[-argCount - 1] = objVal(cast[ptr Obj](newInstance(klass)))
+      return true
     of OBJT_CLOSURE:
       return call(asClosure(callee), argCount)
     of OBJT_NATIVE:
@@ -261,6 +266,38 @@ proc run(): InterpretResult =
       let slot = readByte()
 
       frame.closure.upvalues[slot].location[] = peek(0)
+    of uint8(OP_GET_PROPERTY):
+      if not isInstance(peek(0)):
+        runtimeError("Only instances have properties.")
+        return INTERPRET_RUNTIME_ERROR
+
+      let
+        instance = asInstance(peek(0))
+        name = readString()
+
+      var value: Value
+
+      if tableGet(instance.fields, name, value):
+        discard pop()
+
+        push(value)
+      else:
+        runtimeError("Undefined property '$1'.", cast[cstring](name.chars))
+        return INTERPRET_RUNTIME_ERROR
+    of uint8(OP_SET_PROPERTY):
+      if not isInstance(peek(1)):
+        runtimeError("Only instances have fields.")
+        return INTERPRET_RUNTIME_ERROR
+
+      let instance = asInstance(peek(1))
+
+      discard tableSet(instance.fields, readString(), peek(0))
+
+      let value = pop()
+
+      discard pop()
+
+      push(value)
     of uint8(OP_EQUAL):
       let
         b = pop()
@@ -355,6 +392,8 @@ proc run(): InterpretResult =
       push(res)
 
       frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+    of uint8(OP_CLASS):
+      push(objVal(cast[ptr Obj](newClass(readString()))))
     else:
       discard
 

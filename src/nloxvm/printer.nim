@@ -13,10 +13,14 @@ proc printFunction(function: ptr ObjFunction) =
 
 proc printObject(value: Value) =
   case objType(value)
+  of OBJT_CLASS:
+    write(stdout, cast[cstring](asClass(value).name.chars))
   of OBJT_CLOSURE:
     printFunction(asClosure(value).function)
   of OBJT_FUNCTION:
     printFunction(asFunction(value))
+  of OBJT_INSTANCE:
+    write(stdout, fmt"{cast[cstring](asInstance(value).klass.name.chars)} instance")
   of OBJT_NATIVE:
     write(stdout, "<native fn>")
   of OBJT_STRING:

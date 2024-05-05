@@ -18,6 +18,10 @@ proc allocateObject(size: int, `type`: ObjType): ptr Obj =
   when defined(DEBUG_LOG_GC):
     write(stdout, fmt"{cast[uint](result)} allocate {size} for {ord(`type`)}{'\n'}")
 
+proc newClass*(name: ptr ObjString): ptr ObjClass =
+  result = allocate_obj(ObjClass, OBJT_CLASS)
+  result.name = name
+
 proc newClosure*(function: ptr ObjFunction): ptr ObjClosure =
   var upvalues = allocate(ptr ObjUpvalue, function.upvalueCount)
 
@@ -36,6 +40,12 @@ proc newFunction*(): ptr ObjFunction =
   result.name = nil
 
   initChunk(result.chunk)
+
+proc newInstance*(klass: ptr ObjClass): ptr ObjInstance =
+  result = allocate_obj(ObjInstance, OBJT_INSTANCE)
+  result.klass = klass
+
+  initTable(result.fields)
 
 proc newNative*(function: NativeFn): ptr ObjNative =
   result = allocate_obj(ObjNative, OBJT_NATIVE)

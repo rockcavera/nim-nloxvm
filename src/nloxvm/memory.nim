@@ -84,6 +84,17 @@ proc markArray(`array`: var ValueArray) =
   for i in 0 ..< `array`.count:
     markValue(`array`.values[i])
 
+# table.nim
+
+proc markTable(table: var Table) =
+  for i in 0 ..< table.capacity:
+    let entry = addr table.entries[i]
+
+    markObject(cast[ptr Obj](entry.key))
+    markValue(entry.value)
+
+# end
+
 proc blackenObject(`object`: ptr Obj) =
   when defined(DEBUG_LOG_GC):
     write(stdout, fmt"{cast[uint](`object`)} blacken ")
@@ -93,6 +104,10 @@ proc blackenObject(`object`: ptr Obj) =
     write(stdout, '\n')
 
   case `object`.`type`
+  of OBJT_CLASS:
+    let klass = cast[ptr ObjClass](`object`)
+
+    markObject(cast[ptr Obj](klass.name))
   of OBJT_CLOSURE:
     let closure = cast[ptr ObjClosure](`object`)
 
@@ -106,16 +121,26 @@ proc blackenObject(`object`: ptr Obj) =
     markObject(cast[ptr Obj](function.name))
 
     markArray(function.chunk.constants)
+  of OBJT_INSTANCE:
+    let instance = cast[ptr ObjInstance](`object`)
+
+    markObject(cast[ptr Obj](instance.klass))
+
+    markTable(instance.fields)
   of OBJT_UPVALUE:
     markValue(cast[ptr ObjUpvalue](`object`).closed)
   of OBJT_NATIVE, OBJT_STRING:
     discard
+
+from ./table import freeTable, tableRemoveWhite
 
 proc freeObject*(`object`: ptr Obj) =
   when defined(DEBUG_LOG_GC):
     write(stdout, fmt"{cast[uint](`object`)} free type {ord(`object`.`type`)}{'\n'}")
 
   case `object`.`type`
+  of OBJT_CLASS:
+    free(ObjClass, `object`)
   of OBJT_CLOSURE:
     let closure = cast[ptr ObjClosure](`object`)
 
@@ -128,6 +153,12 @@ proc freeObject*(`object`: ptr Obj) =
     freeChunk(function.chunk)
 
     free(ObjFunction, `object`)
+  of OBJT_INSTANCE:
+    let instance = cast[ptr ObjInstance](`object`)
+
+    freeTable(instance.fields)
+
+    free(ObjInstance, `object`)
   of OBJT_NATIVE:
     free(ObjNative, `object`)
   of OBJT_STRING:
@@ -138,17 +169,6 @@ proc freeObject*(`object`: ptr Obj) =
     free(ObjString, `object`)
   of OBJT_UPVALUE:
     free(ObjUpvalue, `object`)
-
-# table.nim
-
-proc markTable(table: var Table) =
-  for i in 0 ..< table.capacity:
-    let entry = addr table.entries[i]
-
-    markObject(cast[ptr Obj](entry.key))
-    markValue(entry.value)
-
-# end
 
 # compiler.nim
 
@@ -209,8 +229,6 @@ proc sweep() =
         vm.objects = `object`
 
       freeObject(unreached)
-
-from ./table import tableRemoveWhite
 
 proc collectGarbage*() =
   when defined(DEBUG_LOG_GC):
