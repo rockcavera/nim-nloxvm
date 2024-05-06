@@ -87,3 +87,12 @@ var
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "To this":
+    const
+      script = folder / "to_this.lox"
+      expectedExitCode = 65
+      expectedOutput = """[line 3] Error at '=': Invalid assignment target.
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

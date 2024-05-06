@@ -356,3 +356,29 @@ false
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Equals class":
+    const
+      script = folder / "equals_class.lox"
+      expectedExitCode = 0
+      expectedOutput = """true
+false
+false
+true
+false
+false
+false
+false
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Equals method":
+    const
+      script = folder / "equals_method.lox"
+      expectedExitCode = 0
+      expectedOutput = """true
+false
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

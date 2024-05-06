@@ -265,3 +265,35 @@ baz value
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Method binds this":
+    const
+      script = folder / "method_binds_this.lox"
+      expectedExitCode = 0
+      expectedOutput = """foo1
+1
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Method":
+    const
+      script = folder / "method.lox"
+      expectedExitCode = 0
+      expectedOutput = """got method
+arg
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Get and set method":
+    const
+      script = folder / "get_and_set_method.lox"
+      expectedExitCode = 0
+      expectedOutput = """other
+1
+method
+2
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)

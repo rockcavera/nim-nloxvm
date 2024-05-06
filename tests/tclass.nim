@@ -14,3 +14,21 @@ suite "Class":
 """
 
     check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Local reference self":
+    const
+      script = folder / "local_reference_self.lox"
+      expectedExitCode = 0
+      expectedOutput = """Foo
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
+
+  test "Reference self":
+    const
+      script = folder / "reference_self.lox"
+      expectedExitCode = 0
+      expectedOutput = """Foo
+"""
+
+    check (expectedOutput, expectedExitCode) == nloxvmTest(script)
