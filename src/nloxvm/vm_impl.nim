@@ -59,11 +59,16 @@ proc initVM*() =
   initTable(vm.globals)
   initTable(vm.strings)
 
+  vm.initString = nil
+  vm.initString = copyString(cast[ptr char](cstring"init"), 4)
+
   defineNative(cstring"clock", clockNative)
 
 proc freeVM*() =
   freeTable(vm.globals)
   freeTable(vm.strings)
+
+  vm.initString = nil
 
   freeObjects()
 
@@ -92,10 +97,24 @@ proc call(closure: ptr ObjClosure, argCount: int32): bool =
 proc callValue(callee: Value, argCount: int32): bool =
   if isObj(callee):
     case objType(callee)
+    of OBJT_BOUND_METHOD:
+      let bound = asBoundMethod(callee)
+
+      vm.stackTop[-argCount - 1] = bound.receiver
+      return call(bound.`method`, argCount)
     of OBJT_CLASS:
       let klass = asClass(callee)
 
       vm.stackTop[-argCount - 1] = objVal(cast[ptr Obj](newInstance(klass)))
+
+      var initializer: Value
+
+      if tableGet(klass.methods, vm.initString, initializer):
+        return call(asClosure(initializer), argCount)
+      elif argCount != 0:
+        runtimeError("Expected 0 arguments but got $1.", argCount)
+        return false
+
       return true
     of OBJT_CLOSURE:
       return call(asClosure(callee), argCount)
@@ -115,6 +134,47 @@ proc callValue(callee: Value, argCount: int32): bool =
   runtimeError("Can only call functions and classes.")
 
   return false
+
+proc invokeFromClass(klass: ptr ObjClass, name: ptr ObjString, argCount: int32): bool =
+  var `method`: Value
+
+  if not tableGet(klass.methods, name, `method`):
+    runtimeError("Undefined property '$1'.", cast[cstring](name.chars))
+    return false
+
+  call(asClosure(`method`), argCount)
+
+proc invoke(name: ptr ObjString, argCount: int32): bool =
+  let receiver = peek(argCount)
+
+  if not isInstance(receiver):
+    runtimeError("Only instances have methods.")
+    return false
+
+  let instance = asInstance(receiver)
+
+  var value: Value
+
+  if tableGet(instance.fields, name, value):
+    vm.stackTop[-argCount - 1] = value
+    return callValue(value, argCount)
+
+  invokeFromClass(instance.klass, name, argCount)
+
+proc bindMethod(klass: ptr ObjClass, name: ptr ObjString): bool =
+  var `method`: Value
+
+  if not tableGet(klass.methods, name, `method`):
+    runtimeError("Undefined property '$1'.", cast[cstring](name.chars))
+    return false
+
+  let bound = newBoundMethod(peek(0), asClosure(`method`))
+
+  discard pop()
+
+  push(objVal(cast[ptr Obj](bound)))
+
+  true
 
 proc captureUpvalue(local: ptr Value): ptr ObjUpvalue =
   var
@@ -145,6 +205,15 @@ proc closeUpvalues(last: ptr Value) =
     upvalue.location = addr upvalue.closed
 
     vm.openUpvalues = upvalue.next
+
+proc defineMethod(name: ptr ObjString) =
+  let
+    `method` = peek(0)
+    klass = asClass(peek(1))
+
+  discard tableSet(klass.methods, name, `method`)
+
+  discard pop()
 
 proc isFalsey(value: Value): bool =
   isNil(value) or (isBool(value) and not(asBool(value)))
@@ -281,8 +350,7 @@ proc run(): InterpretResult =
         discard pop()
 
         push(value)
-      else:
-        runtimeError("Undefined property '$1'.", cast[cstring](name.chars))
+      elif not bindMethod(instance.klass, name):
         return INTERPRET_RUNTIME_ERROR
     of uint8(OP_SET_PROPERTY):
       if not isInstance(peek(1)):
@@ -356,6 +424,15 @@ proc run(): InterpretResult =
         return INTERPRET_RUNTIME_ERROR
 
       frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+    of uint8(OP_INVOKE):
+      let
+        `method` = readString()
+        argCount = readByte().int32
+
+      if not invoke(`method`, argCount):
+        return INTERPRET_RUNTIME_ERROR
+
+      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
     of uint8(OP_CLOSURE):
       let function = asFunction(readConstant())
 
@@ -394,6 +471,8 @@ proc run(): InterpretResult =
       frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
     of uint8(OP_CLASS):
       push(objVal(cast[ptr Obj](newClass(readString()))))
+    of uint8(OP_METHOD):
+      defineMethod(readString())
     else:
       discard
 

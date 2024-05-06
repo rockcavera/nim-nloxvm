@@ -13,6 +13,8 @@ proc printFunction(function: ptr ObjFunction) =
 
 proc printObject(value: Value) =
   case objType(value)
+  of OBJT_BOUND_METHOD:
+    printFunction(asBoundMethod(value).`method`.function)
   of OBJT_CLASS:
     write(stdout, cast[cstring](asClass(value).name.chars))
   of OBJT_CLOSURE:

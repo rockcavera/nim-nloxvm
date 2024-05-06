@@ -104,10 +104,18 @@ proc blackenObject(`object`: ptr Obj) =
     write(stdout, '\n')
 
   case `object`.`type`
+  of OBJT_BOUND_METHOD:
+    let bound = cast[ptr ObjBoundMethod](`object`)
+
+    markValue(bound.receiver)
+
+    markObject(cast[ptr Obj](bound.`method`))
   of OBJT_CLASS:
     let klass = cast[ptr ObjClass](`object`)
 
     markObject(cast[ptr Obj](klass.name))
+
+    markTable(klass.methods)
   of OBJT_CLOSURE:
     let closure = cast[ptr ObjClosure](`object`)
 
@@ -139,7 +147,13 @@ proc freeObject*(`object`: ptr Obj) =
     write(stdout, fmt"{cast[uint](`object`)} free type {ord(`object`.`type`)}{'\n'}")
 
   case `object`.`type`
+  of OBJT_BOUND_METHOD:
+    free(ObjBoundMethod, `object`)
   of OBJT_CLASS:
+    let klass = cast[ptr ObjClass](`object`)
+
+    freeTable(klass.methods)
+
     free(ObjClass, `object`)
   of OBJT_CLOSURE:
     let closure = cast[ptr ObjClosure](`object`)
@@ -199,6 +213,8 @@ proc markRoots() =
   markTable(vm.globals)
 
   markCompilerRoots()
+
+  markObject(cast[ptr Obj](vm.initString))
 
 proc traceReferences() =
   while vm.grayCount > 0:

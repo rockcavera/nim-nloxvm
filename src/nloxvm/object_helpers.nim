@@ -5,6 +5,9 @@ import ./types, ./value_helpers
 template objType*(value: Value): ObjType =
   asObj(value).`type`
 
+template isBoundMethod*(value: Value): bool =
+  isObjType(value, OBJT_BOUND_METHOD)
+
 template isClass*(value: Value): bool =
   isObjType(value, OBJT_CLASS)
 
@@ -22,6 +25,9 @@ template isNative*(value: Value): bool =
 
 template isString*(value: Value): bool =
   isObjType(value, OBJT_STRING)
+
+template asBoundMethod*(value: Value): ptr ObjBoundMethod =
+  cast[ptr ObjBoundMethod](asObj(value))
 
 template asClass*(value: Value): ptr ObjClass =
   cast[ptr ObjClass](asObj(value))

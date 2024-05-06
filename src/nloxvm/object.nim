@@ -18,9 +18,16 @@ proc allocateObject(size: int, `type`: ObjType): ptr Obj =
   when defined(DEBUG_LOG_GC):
     write(stdout, fmt"{cast[uint](result)} allocate {size} for {ord(`type`)}{'\n'}")
 
+proc newBoundMethod*(receiver: Value, `method`: ptr ObjClosure): ptr ObjBoundMethod =
+  result = allocate_obj(ObjBoundMethod, OBJT_BOUND_METHOD)
+  result.receiver = receiver
+  result.`method` = `method`
+
 proc newClass*(name: ptr ObjString): ptr ObjClass =
   result = allocate_obj(ObjClass, OBJT_CLASS)
   result.name = name
+
+  initTable(result.methods)
 
 proc newClosure*(function: ptr ObjFunction): ptr ObjClosure =
   var upvalues = allocate(ptr ObjUpvalue, function.upvalueCount)

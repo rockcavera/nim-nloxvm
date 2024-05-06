@@ -36,10 +36,12 @@ type
     OP_JUMP_IF_FALSE,
     OP_LOOP,
     OP_CALL,
+    OP_INVOKE,
     OP_CLOSURE,
     OP_CLOSE_UPVALUE,
     OP_RETURN,
-    OP_CLASS
+    OP_CLASS,
+    OP_METHOD
 
   Chunk* = object
     count*: int32
@@ -89,6 +91,8 @@ type
 
   FunctionType* = enum
     TYPE_FUNCTION,
+    TYPE_INITIALIZER,
+    TYPE_METHOD,
     TYPE_SCRIPT
 
   Compiler* = object
@@ -100,11 +104,15 @@ type
     upvalues*: array[UINT8_COUNT, Upvalue]
     scopeDepth*: int32
 
+  ClassCompiler* = object
+    enclosing*: ptr ClassCompiler
+
   # end
 
   # object.nim
 
   ObjType* = enum
+    OBJT_BOUND_METHOD,
     OBJT_CLASS,
     OBJT_CLOSURE,
     OBJT_FUNCTION,
@@ -152,11 +160,17 @@ type
   ObjClass* = object
     obj*: Obj
     name*: ptr ObjString
+    methods*: Table
 
   ObjInstance* = object
     obj*: Obj
     klass*: ptr ObjClass
     fields*: Table
+
+  ObjBoundMethod* = object
+    obj*: Obj
+    receiver*: Value
+    `method`*: ptr ObjClosure
 
   # end
 
@@ -261,6 +275,7 @@ type
     stackTop*: ptr Value
     globals*: Table
     strings*: Table
+    initString*: ptr ObjString
     openUpvalues*: ptr ObjUpvalue
 
     bytesAllocated*: int # uint

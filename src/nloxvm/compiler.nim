@@ -9,7 +9,9 @@ import ./private/pointer_arithmetics
 
 const UINT16_MAX = high(uint16).int32
 
-var parser: Parser
+var
+  parser: Parser
+  currentClass: ptr ClassCompiler = nil
 
 template lexeme(token: Token): openArray[char] =
   toOpenArray(cast[cstring](token.start), 0, token.length - 1)
@@ -117,7 +119,11 @@ template emitJump(instruction: OpCode): int32 =
   emitJump(uint8(instruction))
 
 proc emitReturn() =
-  emitByte(OP_NIL)
+  if current.`type` == TYPE_INITIALIZER:
+    emitBytes(OP_GET_LOCAL, 0)
+  else:
+    emitByte(OP_NIL)
+
   emitByte(OP_RETURN)
 
 proc makeConstant(value: Value): uint8 =
@@ -161,8 +167,13 @@ proc initCompiler(compiler: var Compiler, `type`: FunctionType) =
 
   local.depth = 0
   local.isCaptured = false
-  local.name.start = cast[ptr char](cstring"")
-  local.name.length = 0
+
+  if `type` != TYPE_FUNCTION:
+    local.name.start = cast[ptr char](cstring"this")
+    local.name.length = 4
+  else:
+    local.name.start = cast[ptr char](cstring"")
+    local.name.length = 0
 
 proc endCompiler(): ptr ObjFunction =
   emitReturn()
@@ -379,6 +390,12 @@ proc dot(canAssign: bool) =
     expression()
 
     emitBytes(OP_SET_PROPERTY, name)
+  elif match(TOKEN_LEFT_PAREN):
+    let argCount = argumentList()
+
+    emitBytes(OP_INVOKE, name)
+
+    emitByte(argCount)
   else:
     emitBytes(OP_GET_PROPERTY, name)
 
@@ -451,6 +468,13 @@ proc namedVariable(name: Token, canAssign: bool) =
 proc variable(canAssign: bool) =
   namedVariable(parser.previous, canAssign)
 
+proc this(canAssign: bool) =
+  if isNil(currentClass):
+    error("Can't use 'this' outside of a class.")
+    return
+
+  variable(false)
+
 proc unary(canAssign: bool) =
   let operatorType = parser.previous.`type`
 
@@ -499,7 +523,7 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_PRINT
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RETURN
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_SUPER
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_THIS
+  ParseRule(prefix: this, infix: nil, precedence: PREC_NONE),      # TOKEN_THIS
   ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_TRUE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_VAR
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_WHILE
@@ -578,10 +602,26 @@ proc function(`type`: FunctionType) =
     emitByte(if compiler.upvalues[i].isLocal: 1 else: 0)
     emitByte(compiler.upvalues[i].index)
 
+proc `method`() =
+  consume(TOKEN_IDENTIFIER, "Expect method name.")
+
+  let constant = identifierConstant(parser.previous)
+
+  var `type` = TYPE_METHOD
+
+  if parser.previous.length == 4 and cmpMem(parser.previous.start, cstring"init", 4) == 0:
+    `type` = TYPE_INITIALIZER
+
+  function(`type`)
+
+  emitBytes(OP_METHOD, constant)
+
 proc classDeclaration() =
   consume(TOKEN_IDENTIFIER, "Expect class name.")
 
-  let nameConstant = identifierConstant(parser.previous)
+  let
+    className = parser.previous
+    nameConstant = identifierConstant(parser.previous)
 
   declareVariable()
 
@@ -589,8 +629,23 @@ proc classDeclaration() =
 
   defineVariable(nameConstant)
 
+  var classCompiler: ClassCompiler
+
+  classCompiler.enclosing = currentClass
+  currentClass = addr classCompiler
+
+  namedVariable(className, false)
+
   consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.")
+
+  while not(check(TOKEN_RIGHT_BRACE)) and not(check(TOKEN_EOF)):
+    `method`()
+
   consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.")
+
+  emitByte(OP_POP)
+
+  currentClass = currentClass.enclosing
 
 proc funDeclaration() =
   let global = parseVariable("Expect function name.")
@@ -711,6 +766,9 @@ proc returnStatement() =
   if match(TOKEN_SEMICOLON):
     emitReturn()
   else:
+    if current.`type` == TYPE_INITIALIZER:
+      error("Can't return a value from an initializer.")
+
     expression()
 
     consume(TOKEN_SEMICOLON, "Expect ';' after return value.")

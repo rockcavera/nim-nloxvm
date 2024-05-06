@@ -25,6 +25,19 @@ proc constantInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
 
   offset + 2
 
+proc invokeInstruction(name: string, chunk: var Chunk, offset: int32): int32 =
+  let
+    constant = chunk.code[offset + 1]
+    argCount = chunk.code[offset + 2]
+
+  write(stdout, fmt"{name: <16}  ({argCount} args) {constant: >4} '")
+
+  printValue(chunk.constants.values[constant])
+
+  write(stdout, "'\n")
+
+  offset + 3
+
 proc simpleInstruction(name: string, offset: int32): int32 =
   write(stdout, fmt"{name}{'\n'}")
 
@@ -115,6 +128,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return jumpInstruction("OP_LOOP", -1, chunk, offset)
   of uint8(OP_CALL):
     return byteInstruction("OP_CALL", chunk, offset)
+  of uint8(OP_INVOKE):
+    return invokeInstruction("OP_INVOKE", chunk, offset)
   of uint8(OP_CLOSURE):
     var offset = offset + 1
 
@@ -149,6 +164,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return simpleInstruction("OP_RETURN", offset)
   of uint8(OP_CLASS):
     return constantInstruction("OP_CLASS", chunk, offset)
+  of uint8(OP_METHOD):
+    return constantInstruction("OP_METHOD", chunk, offset)
   else:
     write(stdout, fmt"Unknown opcode {instruction}{'\n'}")
     return offset + 1
