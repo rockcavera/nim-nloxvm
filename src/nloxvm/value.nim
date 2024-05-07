@@ -1,4 +1,4 @@
-import ./memory, ./types, ./value_helpers
+import ./common, ./memory, ./types, ./value_helpers
 
 import ./private/pointer_arithmetics
 
@@ -22,7 +22,7 @@ proc freeValueArray*(`array`: var ValueArray) =
   initValueArray(`array`)
 
 proc valuesEqual*(a: Value, b: Value): bool =
-  when defined(NAN_BOXING):
+  when NAN_BOXING:
     if isNumber(a) and isNumber(b):
       return asNumber(a) == asNumber(b)
 

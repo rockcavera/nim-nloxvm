@@ -1,6 +1,6 @@
 import std/strformat
 
-import ./object_helpers, ./types, ./value_helpers
+import ./common, ./object_helpers, ./types, ./value_helpers
 
 # object.nim
 
@@ -35,7 +35,7 @@ proc printObject(value: Value) =
 # value.nim
 
 proc printValue*(value: Value) {.exportc.} =
-  when defined(NAN_BOXING):
+  when NAN_BOXING:
     if isBool(value):
       write(stdout, $asBool(value))
     elif isNil(value):

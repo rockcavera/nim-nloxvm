@@ -1,8 +1,8 @@
-import ./types
+import ./common, ./types
 
 # value.nim
 
-when defined(NAN_BOXING):
+when NAN_BOXING:
   const
     SIGN_BIT = 0x8000000000000000'u64
     QNAN = 0x7ffc000000000000'u64

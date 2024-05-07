@@ -31,7 +31,7 @@ type
     VAL_NUMBER,
     VAL_OBJ
 
-when defined(NAN_BOXING):
+when NAN_BOXING:
   type
     Value* = uint64
 else:
