@@ -366,6 +366,13 @@ proc run(): InterpretResult =
       discard pop()
 
       push(value)
+    of uint8(OP_GET_SUPER):
+      let
+        name = readString()
+        superclass = asClass(pop())
+
+      if not bindMethod(superclass, name):
+        return INTERPRET_RUNTIME_ERROR
     of uint8(OP_EQUAL):
       let
         b = pop()
@@ -433,6 +440,16 @@ proc run(): InterpretResult =
         return INTERPRET_RUNTIME_ERROR
 
       frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+    of uint8(OP_SUPER_INVOKE):
+      let
+        `method` = readString()
+        argCount = readByte().int32
+        superclass = asClass(pop())
+
+      if not invokeFromClass(superclass, `method`, argCount):
+        return INTERPRET_RUNTIME_ERROR
+
+      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
     of uint8(OP_CLOSURE):
       let function = asFunction(readConstant())
 
@@ -471,6 +488,18 @@ proc run(): InterpretResult =
       frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
     of uint8(OP_CLASS):
       push(objVal(cast[ptr Obj](newClass(readString()))))
+    of uint8(OP_INHERIT):
+      var superclass = peek(1)
+
+      if not isClass(superclass):
+        runtimeError("Superclass must be a class.")
+        return INTERPRET_RUNTIME_ERROR
+
+      var subclass = asClass(peek(0))
+
+      tableAddAll(asClass(superclass).methods, subclass.methods)
+
+      discard pop()
     of uint8(OP_METHOD):
       defineMethod(readString())
     else:

@@ -100,6 +100,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return constantInstruction("OP_GET_PROPERTY", chunk, offset)
   of uint8(OP_SET_PROPERTY):
     return constantInstruction("OP_SET_PROPERTY", chunk, offset)
+  of uint8(OP_GET_SUPER):
+    return constantInstruction("OP_GET_SUPER", chunk, offset)
   of uint8(OP_EQUAL):
     return simpleInstruction("OP_EQUAL", offset)
   of uint8(OP_GREATER):
@@ -130,6 +132,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return byteInstruction("OP_CALL", chunk, offset)
   of uint8(OP_INVOKE):
     return invokeInstruction("OP_INVOKE", chunk, offset)
+  of uint8(OP_SUPER_INVOKE):
+    return invokeInstruction("OP_SUPER_INVOKE", chunk, offset)
   of uint8(OP_CLOSURE):
     var offset = offset + 1
 
@@ -164,6 +168,8 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
     return simpleInstruction("OP_RETURN", offset)
   of uint8(OP_CLASS):
     return constantInstruction("OP_CLASS", chunk, offset)
+  of uint8(OP_INHERIT):
+    return simpleInstruction("OP_INHERIT", offset)
   of uint8(OP_METHOD):
     return constantInstruction("OP_METHOD", chunk, offset)
   else:

@@ -468,6 +468,34 @@ proc namedVariable(name: Token, canAssign: bool) =
 proc variable(canAssign: bool) =
   namedVariable(parser.previous, canAssign)
 
+proc syntheticToken(text: cstring): Token =
+  result.start = cast[ptr char](text)
+  result.length = len(text).int32
+
+proc super(canAssign: bool) =
+  if isNil(currentClass):
+    error("Can't use 'super' outside of a class.")
+  elif not currentClass.hasSuperclass:
+    error("Can't use 'super' in a class with no superclass.")
+
+  consume(TOKEN_DOT, "Expect '.' after 'super'.")
+  consume(TOKEN_IDENTIFIER, "Expect superclass method name.")
+
+  let name = identifierConstant(parser.previous)
+
+  namedVariable(syntheticToken(cstring"this"), false)
+
+  if match(TOKEN_LEFT_PAREN):
+    let argCount = argumentList()
+
+    namedVariable(syntheticToken(cstring"super"), false)
+
+    emitBytes(OP_SUPER_INVOKE, name)
+    emitByte(argCount)
+  else:
+    namedVariable(syntheticToken(cstring"super"), false)
+    emitBytes(OP_GET_SUPER, name)
+
 proc this(canAssign: bool) =
   if isNil(currentClass):
     error("Can't use 'this' outside of a class.")
@@ -522,7 +550,7 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: `or`, precedence: PREC_OR),      # TOKEN_OR
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_PRINT
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RETURN
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_SUPER
+  ParseRule(prefix: super, infix: nil, precedence: PREC_NONE),      # TOKEN_SUPER
   ParseRule(prefix: this, infix: nil, precedence: PREC_NONE),      # TOKEN_THIS
   ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_TRUE
   ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_VAR
@@ -631,8 +659,29 @@ proc classDeclaration() =
 
   var classCompiler: ClassCompiler
 
+  classCompiler.hasSuperclass = false
   classCompiler.enclosing = currentClass
   currentClass = addr classCompiler
+
+  if match(TOKEN_LESS):
+    consume(TOKEN_IDENTIFIER, "Expect superclass name.")
+
+    variable(false)
+
+    if identifiersEqual(className, parser.previous):
+      error("A class can't inherit from itself.")
+
+    beginScope()
+
+    addLocal(syntheticToken(cstring"super"))
+
+    defineVariable(0)
+
+    namedVariable(className, false)
+
+    emitByte(OP_INHERIT)
+
+    classCompiler.hasSuperclass = true
 
   namedVariable(className, false)
 
@@ -644,6 +693,9 @@ proc classDeclaration() =
   consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.")
 
   emitByte(OP_POP)
+
+  if classCompiler.hasSuperclass:
+    endScope()
 
   currentClass = currentClass.enclosing
 
