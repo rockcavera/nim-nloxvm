@@ -35,14 +35,24 @@ proc printObject(value: Value) =
 # value.nim
 
 proc printValue*(value: Value) {.exportc.} =
-  case value.`type`
-  of VAL_BOOL:
-    write(stdout, $asBool(value))
-  of VAL_NIL:
-    write(stdout, "nil")
-  of VAL_NUMBER:
-    write(stdout, fmt"{asNumber(value):g}")
-  of VAL_OBJ:
-    printObject(value)
+  when defined(NAN_BOXING):
+    if isBool(value):
+      write(stdout, $asBool(value))
+    elif isNil(value):
+      write(stdout, "nil")
+    elif isNumber(value):
+      write(stdout, fmt"{asNumber(value):g}")
+    elif isObj(value):
+      printObject(value)
+  else:
+    case value.`type`
+    of VAL_BOOL:
+      write(stdout, $asBool(value))
+    of VAL_NIL:
+      write(stdout, "nil")
+    of VAL_NUMBER:
+      write(stdout, fmt"{asNumber(value):g}")
+    of VAL_OBJ:
+      printObject(value)
 
 # end

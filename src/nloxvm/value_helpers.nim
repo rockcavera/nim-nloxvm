@@ -2,37 +2,95 @@ import ./types
 
 # value.nim
 
-template isBool*(value: Value): bool =
-  value.`type` == VAL_BOOL
+when defined(NAN_BOXING):
+  const
+    SIGN_BIT = 0x8000000000000000'u64
+    QNAN = 0x7ffc000000000000'u64
 
-template isNil*(value: Value): bool =
-  value.`type` == VAL_NIL
+    TAG_NIL = 1
+    TAG_FALSE = 2
+    TAG_TRUE = 3
 
-template isNumber*(value: Value): bool =
-  value.`type` == VAL_NUMBER
+    falseVal = Value(QNAN or TAG_FALSE)
+    trueVal = Value(QNAN or TAG_TRUE)
 
-template isObj*(value: Value): bool =
-  value.`type` == VAL_OBJ
+  template isBool*(value: Value): bool =
+    (value or 1) == trueVal
 
-template asObj*(value: Value): ptr Obj =
-  value.obj
+  template isNil*(value: Value): bool =
+    value == nilVal()
 
-template asBool*(value: Value): bool =
-  value.boolean
+  template isNumber*(value: Value): bool =
+    (value and QNAN) != QNAN
 
-template asNumber*(value: Value): float =
-  value.number
+  template isObj*(value: Value): bool =
+    (value and (QNAN or SIGN_BIT)) == (QNAN or SIGN_BIT)
 
-template boolVal*(value: bool): Value =
-  Value(`type`: VAL_BOOL, boolean: value)
+  template asBool*(value: Value): bool =
+    value == trueVal
 
-template nilVal*(): Value =
-  Value(`type`: VAL_NIL, number: 0.0'f)
+  template asNumber*(value: Value): float =
+    valueToNum(value)
 
-template numberVal*(value: float): Value =
-  Value(`type`: VAL_NUMBER, number: value)
+  template asObj*(value: Value): ptr Obj =
+    cast[ptr Obj](value and not(SIGN_BIT or QNAN))
 
-template objVal*(`object`: ptr Obj): Value =
-  Value(`type`: VAL_OBJ, obj: `object`)
+  template boolVal*(b: bool): Value =
+    if b: trueVal
+    else: falseVal
+
+  template nilVal*(): Value =
+    Value(QNAN or TAG_NIL)
+
+  template numberVal*(num: float): Value =
+    numToValue(num)
+
+  template objVal*(obj: ptr Obj): Value =
+    Value(SIGN_BIT or QNAN or cast[uint64](obj))
+
+  proc valueToNum*(value: Value): float {.inline.} =
+    when defined(NAN_BOXING_WITH_CAST):
+      cast[float](value) # for compilers that do not optimize `copyMem()`
+    else:
+      copyMem(addr result, addr value, sizeof(Value))
+
+  proc numToValue*(num: float): Value {.inline.} =
+    when defined(NAN_BOXING_WITH_CAST):
+      cast[Value](num) # for compilers that do not optimize `copyMem()`
+    else:
+      copyMem(addr result, addr num, sizeof(float))
+else:
+  template isBool*(value: Value): bool =
+    value.`type` == VAL_BOOL
+
+  template isNil*(value: Value): bool =
+    value.`type` == VAL_NIL
+
+  template isNumber*(value: Value): bool =
+    value.`type` == VAL_NUMBER
+
+  template isObj*(value: Value): bool =
+    value.`type` == VAL_OBJ
+
+  template asObj*(value: Value): ptr Obj =
+    value.obj
+
+  template asBool*(value: Value): bool =
+    value.boolean
+
+  template asNumber*(value: Value): float =
+    value.number
+
+  template boolVal*(value: bool): Value =
+    Value(`type`: VAL_BOOL, boolean: value)
+
+  template nilVal*(): Value =
+    Value(`type`: VAL_NIL, number: 0.0'f)
+
+  template numberVal*(value: float): Value =
+    Value(`type`: VAL_NUMBER, number: value)
+
+  template objVal*(`object`: ptr Obj): Value =
+    Value(`type`: VAL_OBJ, obj: `object`)
 
 # end

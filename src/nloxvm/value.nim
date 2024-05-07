@@ -22,15 +22,21 @@ proc freeValueArray*(`array`: var ValueArray) =
   initValueArray(`array`)
 
 proc valuesEqual*(a: Value, b: Value): bool =
-  if a.`type` != b.`type`:
-    return false
+  when defined(NAN_BOXING):
+    if isNumber(a) and isNumber(b):
+      return asNumber(a) == asNumber(b)
 
-  case a.`type`
-  of VAL_BOOL:
-    return asBool(a) == asBool(b)
-  of VAL_NIL:
-    return true
-  of VAL_NUMBER:
-    return asNumber(a) == asNumber(b)
-  of VAL_OBJ:
-    asObj(a) == asObj(b)
+    a == b
+  else:
+    if a.`type` != b.`type`:
+      return false
+
+    case a.`type`
+    of VAL_BOOL:
+      return asBool(a) == asBool(b)
+    of VAL_NIL:
+      return true
+    of VAL_NUMBER:
+      return asNumber(a) == asNumber(b)
+    of VAL_OBJ:
+      asObj(a) == asObj(b)

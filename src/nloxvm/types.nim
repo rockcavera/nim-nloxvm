@@ -5,6 +5,55 @@ const
   STACK_MAX = (FRAMES_MAX * UINT8_COUNT)
 
 type
+  # object.nim
+  ObjType* = enum
+    OBJT_BOUND_METHOD,
+    OBJT_CLASS,
+    OBJT_CLOSURE,
+    OBJT_FUNCTION,
+    OBJT_INSTANCE,
+    OBJT_NATIVE,
+    OBJT_STRING,
+    OBJT_UPVALUE
+
+  Obj* = object
+    `type`*: ObjType
+    isMarked*: bool
+    next*: ptr Obj
+
+  # end
+
+  # value.nim
+
+  ValueType* = enum
+    VAL_BOOL,
+    VAL_NIL,
+    VAL_NUMBER,
+    VAL_OBJ
+
+when defined(NAN_BOXING):
+  type
+    Value* = uint64
+else:
+  type
+    Value* = object
+      case `type`*: ValueType
+      of VAL_BOOL:
+        boolean*: bool
+      of VAL_NIL, VAL_NUMBER:
+        number*: float
+      of VAL_OBJ:
+        obj*: ptr Obj
+
+type
+  ValueArray* = object
+    capacity*: int32
+    count*: int32
+    values*: ptr Value
+
+  # end
+
+type
   # chunk.nim
 
   OpCode* {.size: 1.} = enum
@@ -115,21 +164,6 @@ type
 
   # object.nim
 
-  ObjType* = enum
-    OBJT_BOUND_METHOD,
-    OBJT_CLASS,
-    OBJT_CLOSURE,
-    OBJT_FUNCTION,
-    OBJT_INSTANCE,
-    OBJT_NATIVE,
-    OBJT_STRING,
-    OBJT_UPVALUE
-
-  Obj* = object
-    `type`*: ObjType
-    isMarked*: bool
-    next*: ptr Obj
-
   ObjFunction* = object
     obj*: Obj
     arity*: int32
@@ -237,30 +271,6 @@ type
     start*: ptr char
     current*: ptr char
     line*: int32
-
-  # end
-
-  # value.nim
-
-  ValueType* = enum
-    VAL_BOOL,
-    VAL_NIL,
-    VAL_NUMBER,
-    VAL_OBJ
-
-  Value* = object
-    case `type`*: ValueType
-    of VAL_BOOL:
-      boolean*: bool
-    of VAL_NIL, VAL_NUMBER:
-      number*: float
-    of VAL_OBJ:
-      obj*: ptr Obj
-
-  ValueArray* = object
-    capacity*: int32
-    count*: int32
-    values*: ptr Value
 
   # end
 

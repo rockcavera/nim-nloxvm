@@ -15,7 +15,7 @@ proc freeTable*(table: var Table) =
 
 proc findEntry(entries: ptr Entry, capacity: int32, key: ptr ObjString): ptr Entry =
   var
-    index = key.hash mod uint32(capacity)
+    index = key.hash and uint32(capacity - 1)
     tombstone = cast[ptr Entry](nil)
 
   while true:
@@ -30,7 +30,7 @@ proc findEntry(entries: ptr Entry, capacity: int32, key: ptr ObjString): ptr Ent
     elif entry.key == key:
       return entry
 
-    index = (index + 1) mod uint32(capacity)
+    index = (index + 1) and uint32(capacity - 1)
 
 proc tableGet*(table: var Table, key: ptr ObjString, value: var Value): bool =
   if table.count == 0:
@@ -113,7 +113,7 @@ proc tableFindString*(table: var Table, chars: ptr char, length: int32, hash: ui
   if table.count == 0:
     return nil
 
-  var index = hash mod uint32(table.capacity)
+  var index = hash and uint32(table.capacity - 1)
 
   while true:
     let entry = table.entries + index
@@ -124,7 +124,7 @@ proc tableFindString*(table: var Table, chars: ptr char, length: int32, hash: ui
     elif entry.key.length == length and entry.key.hash == hash and cmpMem(entry.key.chars, chars, length) == 0:
       return entry.key
 
-    index = (index + 1) mod uint32(table.capacity)
+    index = (index + 1) and uint32(table.capacity - 1)
 
 proc tableRemoveWhite*(table: var Table) =
   for i in 0 ..< table.capacity:
