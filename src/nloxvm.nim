@@ -1,3 +1,3 @@
-import ./nloxvm/[main, debug]
+import ./nloxvm/main
 
 main()

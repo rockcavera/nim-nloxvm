@@ -291,7 +291,7 @@ proc run(): InterpretResult =
       let constant = readConstant()
       push(constant)
     of uint8(OP_NIL):
-      push(nilVal())
+      push(nilVal)
     of uint8(OP_TRUE):
       push(boolVal(true))
     of uint8(OP_FALSE):

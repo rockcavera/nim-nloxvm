@@ -50,7 +50,7 @@ proc adjustCapacity(table: var Table, capacity: int32) =
 
   for i in 0 ..< capacity:
     entries[i].key = nil
-    entries[i].value = nilVal()
+    entries[i].value = nilVal
 
   table.count = 0
 

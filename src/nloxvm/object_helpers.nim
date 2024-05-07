@@ -50,7 +50,7 @@ template asString*(value: Value): ptr ObjString =
 template asCString*(value: Value): ptr char =
   cast[ptr ObjString](asObj(value)).chars
 
-proc isObjType*(value: Value, `type`: ObjType): bool =
+proc isObjType*(value: Value, `type`: ObjType): bool {.inline.} =
   isObj(value) and asObj(value).`type` == `type`
 
 # end

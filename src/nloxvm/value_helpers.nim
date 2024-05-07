@@ -18,7 +18,7 @@ when defined(NAN_BOXING):
     (value or 1) == trueVal
 
   template isNil*(value: Value): bool =
-    value == nilVal()
+    value == nilVal
 
   template isNumber*(value: Value): bool =
     (value and QNAN) != QNAN
@@ -39,8 +39,7 @@ when defined(NAN_BOXING):
     if b: trueVal
     else: falseVal
 
-  template nilVal*(): Value =
-    Value(QNAN or TAG_NIL)
+  const nilVal* = Value(QNAN or TAG_NIL)
 
   template numberVal*(num: float): Value =
     numToValue(num)
@@ -84,8 +83,7 @@ else:
   template boolVal*(value: bool): Value =
     Value(`type`: VAL_BOOL, boolean: value)
 
-  template nilVal*(): Value =
-    Value(`type`: VAL_NIL, number: 0.0'f)
+  const nilVal* = Value(`type`: VAL_NIL, number: 0.0'f)
 
   template numberVal*(value: float): Value =
     Value(`type`: VAL_NUMBER, number: value)

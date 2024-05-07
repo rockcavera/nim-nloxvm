@@ -66,7 +66,7 @@ proc allocateString(chars: ptr char, length: int32, hash: uint32): ptr ObjString
 
   push(objVal(cast[ptr Obj](result)))
 
-  discard tableSet(vm.strings, result, nilVal())
+  discard tableSet(vm.strings, result, nilVal)
 
   discard pop()
 
@@ -107,5 +107,5 @@ proc copyString*(chars: ptr char, length: int32): ptr ObjString =
 proc newUpvalue*(slot: ptr Value): ptr ObjUpvalue =
   result = allocate_obj(ObjUpvalue, OBJT_UPVALUE)
   result.location = slot
-  result.closed = nilVal()
+  result.closed = nilVal
   result.next = nil
