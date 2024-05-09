@@ -1,4 +1,4 @@
-import ./memory, ./value, ./types, ./vm_ops
+import ./memory, ./value, ./types
 
 import ./private/pointer_arithmetics
 
@@ -10,7 +10,7 @@ proc initChunk*(chunk: var Chunk) =
 
   initValueArray(chunk.constants)
 
-proc freeChunk*(chunk: var Chunk) {.exportc.} =
+proc freeChunk*(chunk: var Chunk) {.exportc: "freeChunk__nloxvmZchunk_u23".} =
   free_array(uint8, chunk.code, chunk.capacity)
   free_array(int32, chunk.lines, chunk.capacity)
   freeValueArray(chunk.constants)
@@ -33,6 +33,9 @@ template writeChunk*(chunk: var Chunk, opCode: OpCode, line: int32) =
 
 template writeChunk*(chunk: var Chunk, value: int32, line: int32) =
   writeChunk(chunk, uint8(value), line)
+
+proc push(value: Value) {.importc: "push__nloxvmZvm95impl_u4".}
+proc pop(): Value {.importc: "pop__nloxvmZvm95impl_u15".}
 
 proc addConstant*(chunk: var Chunk, value: Value): int32 =
   push(value)

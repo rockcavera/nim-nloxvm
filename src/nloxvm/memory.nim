@@ -11,7 +11,7 @@ import ./private/pointer_arithmetics
 
 const GC_HEAP_GROW_FACTOR {.intdefine.} = 2
 
-proc freeChunk(chunk: var Chunk) {.importc.}
+proc freeChunk(chunk: var Chunk) {.importc: "freeChunk__nloxvmZchunk_u23".}
 proc collectGarbage*()
 
 template allocate*[T](`type`: typedesc[T], count: untyped): ptr T =

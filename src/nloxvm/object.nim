@@ -1,7 +1,7 @@
 when defined(DEBUG_LOG_GC):
   import std/strformat
 
-import ./chunk, ./globals, ./memory, ./table, ./types, ./value_helpers, ./vm_ops
+import ./chunk, ./globals, ./memory, ./table, ./types, ./value_helpers
 
 import ./private/pointer_arithmetics
 
@@ -57,6 +57,9 @@ proc newInstance*(klass: ptr ObjClass): ptr ObjInstance =
 proc newNative*(function: NativeFn): ptr ObjNative =
   result = allocate_obj(ObjNative, OBJT_NATIVE)
   result.function = function
+
+proc push(value: Value) {.importc: "push__nloxvmZvm95impl_u4".}
+proc pop(): Value {.importc: "pop__nloxvmZvm95impl_u15".}
 
 proc allocateString(chars: ptr char, length: int32, hash: uint32): ptr ObjString =
   result = allocate_obj(ObjString, OBJT_STRING)
