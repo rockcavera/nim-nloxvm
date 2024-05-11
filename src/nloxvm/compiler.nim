@@ -209,7 +209,7 @@ proc getRule(`type`: TokenType): ptr ParseRule
 proc parsePrecedence(precedence: Precedence)
 
 proc identifierConstant(name: Token): uint8 =
-  makeConstant(objVal(cast[ptr Obj](copyString(name.start, name.length))))
+  makeConstant(objVal(copyString(name.start, name.length)))
 
 proc identifiersEqual(a: Token, b: Token): bool =
   if a.length != b.length:
@@ -436,7 +436,7 @@ proc `or`(canAssign: bool) =
   patchJump(endJump)
 
 proc string(canAssign: bool) =
-  emitConstant(objVal(cast[ptr Obj](copyString(parser.previous.start + 1, parser.previous.length - 2))))
+  emitConstant(objVal(copyString(parser.previous.start + 1, parser.previous.length - 2)))
 
 proc namedVariable(name: Token, canAssign: bool) =
   var
@@ -624,7 +624,7 @@ proc function(`type`: FunctionType) =
 
   let function = endCompiler()
 
-  emitBytes(OP_CLOSURE, makeConstant(objVal(cast[ptr Obj](function))))
+  emitBytes(OP_CLOSURE, makeConstant(objVal(function)))
 
   for i in 0 ..< function.upvalueCount:
     emitByte(if compiler.upvalues[i].isLocal: 1 else: 0)

@@ -40,8 +40,8 @@ proc push(value: Value) {.extern: "push__nloxvmZvm95impl_u4".}
 proc pop(): Value {.extern: "pop__nloxvmZvm95impl_u15".}
 
 proc defineNative(name: cstring, function: NativeFn) =
-  push(objVal(cast[ptr Obj](copyString(cast[ptr char](name), len(name).int32))))
-  push(objVal(cast[ptr Obj](newNative(function))))
+  push(objVal(copyString(cast[ptr char](name), len(name).int32)))
+  push(objVal(newNative(function)))
 
   discard tableSet(vm.globals, asString(vm.stack[0]), vm.stack[1])
 
@@ -116,7 +116,7 @@ proc callValue(callee: Value, argCount: int32): bool =
     of OBJT_CLASS:
       let klass = asClass(callee)
 
-      vm.stackTop[-argCount - 1] = objVal(cast[ptr Obj](newInstance(klass)))
+      vm.stackTop[-argCount - 1] = objVal(newInstance(klass))
 
       var initializer: Value
 
@@ -183,7 +183,7 @@ proc bindMethod(klass: ptr ObjClass, name: ptr ObjString): bool =
 
   discard pop()
 
-  push(objVal(cast[ptr Obj](bound)))
+  push(objVal(bound))
 
   true
 
@@ -246,7 +246,7 @@ proc concatenate() =
   discard pop()
   discard pop()
 
-  push(objVal(cast[ptr Obj](result)))
+  push(objVal(result))
 
 template readByte(): uint8 =
   let tmp = frame.ip[]
@@ -286,7 +286,7 @@ proc run(): InterpretResult =
     when defined(DEBUG_TRACE_EXECUTION):
       write(stdout, "          ")
 
-      for slot in (addr vm.stack[0]) ..< vm.stackTop:
+      for slot in cast[ptr Value](addr vm.stack[0]) ..< vm.stackTop:
         write(stdout, "[ ")
         printValue(slot[])
         write(stdout, " ]")
@@ -466,7 +466,7 @@ proc run(): InterpretResult =
 
       var closure = newClosure(function)
 
-      push(objVal(cast[ptr Obj](closure)))
+      push(objVal(closure))
 
       for i in 0 ..< closure.upvalueCount:
         let
@@ -498,7 +498,7 @@ proc run(): InterpretResult =
 
       frame = addr vm.frames[vm.frameCount - 1]
     of uint8(OP_CLASS):
-      push(objVal(cast[ptr Obj](newClass(readString()))))
+      push(objVal(newClass(readString())))
     of uint8(OP_INHERIT):
       var superclass = peek(1)
 
@@ -522,13 +522,13 @@ proc interpret*(source: var string): InterpretResult =
   if isNil(function):
     return INTERPRET_COMPILE_ERROR
 
-  push(objVal(cast[ptr Obj](function)))
+  push(objVal(function))
 
   let closure = newClosure(function)
 
   discard pop()
 
-  push(objVal(cast[ptr Obj](closure)))
+  push(objVal(closure))
 
   discard call(closure, 0)
 

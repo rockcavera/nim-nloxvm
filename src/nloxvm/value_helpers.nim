@@ -44,7 +44,7 @@ when NAN_BOXING:
   template numberVal*(num: float): Value =
     numToValue(num)
 
-  template objVal*(obj: ptr Obj): Value =
+  template objVal*[T: Obj|ObjFunction|ObjNative|ObjString|ObjUpvalue|ObjClosure|ObjClass|ObjInstance|ObjBoundMethod](obj: ptr T): Value =
     Value(SIGN_BIT or QNAN or cast[uint64](obj))
 
   proc valueToNum*(value: Value): float {.inline.} =
@@ -88,7 +88,10 @@ else:
   template numberVal*(value: float): Value =
     Value(`type`: VAL_NUMBER, number: value)
 
-  template objVal*(`object`: ptr Obj): Value =
-    Value(`type`: VAL_OBJ, obj: `object`)
+  template objVal*[T: Obj|ObjFunction|ObjNative|ObjString|ObjUpvalue|ObjClosure|ObjClass|ObjInstance|ObjBoundMethod](`object`: ptr T): Value =
+    when T is Obj:
+      Value(`type`: VAL_OBJ, obj: `object`)
+    else:
+      Value(`type`: VAL_OBJ, obj: cast[ptr Obj](`object`))
 
 # end

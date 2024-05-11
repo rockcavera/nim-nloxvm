@@ -67,7 +67,7 @@ proc allocateString(chars: ptr char, length: int32, hash: uint32): ptr ObjString
   result.chars = chars
   result.hash = hash
 
-  push(objVal(cast[ptr Obj](result)))
+  push(objVal(result))
 
   discard tableSet(vm.strings, result, nilVal)
 
