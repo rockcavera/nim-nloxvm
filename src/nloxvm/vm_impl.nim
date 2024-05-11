@@ -1,4 +1,4 @@
-import std/[strformat, strutils, times]
+import std/[strutils, times]
 
 import ./compiler, ./globals, ./memory, ./object, ./object_helpers, ./printer, ./table, ./types, ./value, ./value_helpers
 
@@ -7,8 +7,18 @@ when defined(DEBUG_TRACE_EXECUTION):
 
 import ./private/pointer_arithmetics
 
-proc clockNative(argCount: int32, args: ptr Value): Value =
-  numberVal(cpuTime())
+when defined(nloxvmBenchmark):
+  import std/monotimes
+
+  proc clockNative(argCount: int32, args: ptr Value): Value =
+    let
+      current = ticks(getMonoTime())
+      milliseconds = float(convert(Nanoseconds, Milliseconds, current))
+
+    numberVal(milliseconds / 1000.0)
+else:
+  proc clockNative(argCount: int32, args: ptr Value): Value =
+    numberVal(cpuTime())
 
 proc resetStack() =
   vm.stackTop = addr vm.stack[0]
@@ -17,9 +27,11 @@ proc resetStack() =
 
 proc runtimeError(format: string, args: varargs[string, `$`]) =
   if len(args) > 0:
-    write(stderr, format % args, "\n")
+    write(stderr, format % args)
   else:
-    write(stderr, format, "\n")
+    write(stderr, format)
+
+  write(stderr, '\n')
 
   for i in countdown(vm.frameCount - 1, 0):
     let
@@ -27,12 +39,14 @@ proc runtimeError(format: string, args: varargs[string, `$`]) =
       function = frame.closure.function
       instruction = frame.ip - function.chunk.code - 1
 
-    write(stderr, "[line $1] in " % $function.chunk.lines[instruction])
+    write(stderr, "[line ", $function.chunk.lines[instruction], "] in ")
 
     if isNil(function.name):
       write(stderr, "script\n")
     else:
-      write(stderr, fmt"{cast[cstring](function.name.chars)}(){'\n'}")
+      discard writeBuffer(stderr, function.name.chars, function.name.length)
+
+      write(stderr, "()\n")
 
   resetStack()
 

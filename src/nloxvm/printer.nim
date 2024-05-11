@@ -9,24 +9,36 @@ proc printFunction(function: ptr ObjFunction) =
     write(stdout, "<script>")
     return
 
-  write(stdout, fmt"<fn {cast[cstring](function.name.chars)}>")
+  write(stdout, "<fn ")
+
+  discard writeBuffer(stdout, function.name.chars, function.name.length)
+
+  write(stdout, ">")
 
 proc printObject(value: Value) =
   case objType(value)
   of OBJT_BOUND_METHOD:
     printFunction(asBoundMethod(value).`method`.function)
   of OBJT_CLASS:
-    write(stdout, cast[cstring](asClass(value).name.chars))
+    let klass = asClass(value)
+
+    discard writeBuffer(stdout, klass.name.chars, klass.name.length)
   of OBJT_CLOSURE:
     printFunction(asClosure(value).function)
   of OBJT_FUNCTION:
     printFunction(asFunction(value))
   of OBJT_INSTANCE:
-    write(stdout, fmt"{cast[cstring](asInstance(value).klass.name.chars)} instance")
+    let instance = asInstance(value)
+
+    discard writeBuffer(stdout, instance.klass.name.chars, instance.klass.name.length)
+
+    write(stdout, " instance")
   of OBJT_NATIVE:
     write(stdout, "<native fn>")
   of OBJT_STRING:
-    write(stdout, cast[cstring](asCString(value)))
+    let string = asString(value)
+
+    discard writeBuffer(stdout, string.chars, string.length)
   of OBJT_UPVALUE:
     write(stdout, "upvalue")
 
@@ -34,7 +46,7 @@ proc printObject(value: Value) =
 
 # value.nim
 
-proc printValue*(value: Value) {.exportc.} =
+proc printValue*(value: Value) =
   when NAN_BOXING:
     if isBool(value):
       write(stdout, $asBool(value))

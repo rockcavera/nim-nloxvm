@@ -1,4 +1,4 @@
-import std/[parseutils, strformat]
+import std/parseutils
 
 import ./chunk, ./common, ./globals, ./object, ./scanner, ./types, ./value_helpers
 
@@ -25,18 +25,22 @@ proc errorAt(token: var Token, message: ptr char) =
 
   parser.panicMode = true
 
-  write(stderr, fmt"[line {token.line}] Error")
+  write(stderr, "[line ", $token.line, "] Error")
 
   if token.`type` == TOKEN_EOF:
-    write(stderr, fmt" at end")
+    write(stderr, " at end")
   elif token.`type` == TOKEN_ERROR:
     discard
   else:
     write(stderr, " at '")
-    discard writeBuffer(stderr, token.start, token.length)
-    write(stderr, "'")
 
-  write(stderr, fmt": {cast[cstring](message)}{'\n'}")
+    discard writeBuffer(stderr, token.start, token.length)
+
+    write(stderr, '\'')
+
+  write(stderr, ": ")
+  write(stderr, cast[cstring](message))
+  write(stderr, '\n')
 
   parser.hadError = true
 

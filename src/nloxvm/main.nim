@@ -1,4 +1,4 @@
-import std/[cmdline, exitprocs, strformat]
+import std/[cmdline, exitprocs]
 
 import ./vm_impl, ./types
 
@@ -22,7 +22,8 @@ proc runFile(path: string) =
   try:
     source = readFile(path)
   except IOError:
-    write(stderr, fmt"""Could not open file "{path}".{'\n'}""")
+    write(stderr, "Could not open file \"", path, "\".\n")
+
     quit(74)
 
   if len(source) == 0:
