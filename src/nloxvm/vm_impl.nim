@@ -11,7 +11,7 @@ proc clockNative(argCount: int32, args: ptr Value): Value =
   numberVal(cpuTime())
 
 proc resetStack() =
-  vm.stackTop = cast[ptr Value](addr vm.stack[0])
+  vm.stackTop = addr vm.stack[0]
   vm.frameCount = 0
   vm.openUpvalues = nil
 
@@ -23,7 +23,7 @@ proc runtimeError(format: string, args: varargs[string, `$`]) =
 
   for i in countdown(vm.frameCount - 1, 0):
     let
-      frame = cast[ptr CallFrame](addr vm.frames[i])
+      frame = addr vm.frames[i]
       function = frame.closure.function
       instruction = frame.ip - function.chunk.code - 1
 
@@ -95,7 +95,7 @@ proc call(closure: ptr ObjClosure, argCount: int32): bool =
     runtimeError("Stack overflow.")
     return false
 
-  var frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount])
+  var frame = addr vm.frames[vm.frameCount]
 
   inc(vm.frameCount)
 
@@ -280,13 +280,13 @@ template binaryOp(valueType: untyped, op: untyped) =
   push(valueType(op(a, b)))
 
 proc run(): InterpretResult =
-  var frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+  var frame = addr vm.frames[vm.frameCount - 1]
 
   while true:
     when defined(DEBUG_TRACE_EXECUTION):
       write(stdout, "          ")
 
-      for slot in cast[ptr Value](addr vm.stack[0]) ..< vm.stackTop:
+      for slot in (addr vm.stack[0]) ..< vm.stackTop:
         write(stdout, "[ ")
         printValue(slot[])
         write(stdout, " ]")
@@ -441,7 +441,7 @@ proc run(): InterpretResult =
       if not callValue(peek(argCount), argCount):
         return INTERPRET_RUNTIME_ERROR
 
-      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+      frame = addr vm.frames[vm.frameCount - 1]
     of uint8(OP_INVOKE):
       let
         `method` = readString()
@@ -450,7 +450,7 @@ proc run(): InterpretResult =
       if not invoke(`method`, argCount):
         return INTERPRET_RUNTIME_ERROR
 
-      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+      frame = addr vm.frames[vm.frameCount - 1]
     of uint8(OP_SUPER_INVOKE):
       let
         `method` = readString()
@@ -460,7 +460,7 @@ proc run(): InterpretResult =
       if not invokeFromClass(superclass, `method`, argCount):
         return INTERPRET_RUNTIME_ERROR
 
-      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+      frame = addr vm.frames[vm.frameCount - 1]
     of uint8(OP_CLOSURE):
       let function = asFunction(readConstant())
 
@@ -496,7 +496,7 @@ proc run(): InterpretResult =
 
       push(res)
 
-      frame = cast[ptr CallFrame](addr vm.frames[vm.frameCount - 1])
+      frame = addr vm.frames[vm.frameCount - 1]
     of uint8(OP_CLASS):
       push(objVal(cast[ptr Obj](newClass(readString()))))
     of uint8(OP_INHERIT):

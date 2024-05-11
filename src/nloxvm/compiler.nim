@@ -44,13 +44,13 @@ proc error(message: ptr char) =
   errorAt(parser.previous, message)
 
 proc error(message: string) =
-  errorAt(parser.previous, cast[ptr char](addr message[0]))
+  errorAt(parser.previous, addr message[0])
 
 proc errorAtCurrent(message: ptr char) =
   errorAt(parser.current, message)
 
 proc errorAtCurrent(message: string) =
-  errorAt(parser.current, cast[ptr char](addr message[0]))
+  errorAt(parser.current, addr message[0])
 
 proc advance() =
   parser.previous = parser.current
@@ -68,7 +68,7 @@ proc consume(`type`: TokenType, message: string) =
     advance()
     return
 
-  errorAtCurrent(cast[ptr char](addr message[0]))
+  errorAtCurrent(addr message[0])
 
 proc check(`type`: TokenType): bool =
   parser.current.`type` == `type`
@@ -161,7 +161,7 @@ proc initCompiler(compiler: var Compiler, `type`: FunctionType) =
   if `type` != TYPE_SCRIPT:
     current.function.name = copyString(parser.previous.start, parser.previous.length)
 
-  var local = cast[ptr Local](addr current.locals[current.localCount])
+  var local = addr current.locals[current.localCount]
 
   inc(current.localCount)
 
@@ -219,7 +219,7 @@ proc identifiersEqual(a: Token, b: Token): bool =
 
 proc resolveLocal(compiler: ptr Compiler, name: Token): int32 =
   for i in countdown(compiler.localCount - 1, 0):
-    let local = cast[ptr Local](addr compiler.locals[i])
+    let local = addr compiler.locals[i]
 
     if identifiersEqual(name, local.name):
       if local.depth == -1:
@@ -275,7 +275,7 @@ proc addLocal(name: Token) =
 
   inc(current.localCount)
 
-  var local = cast[ptr Local](addr current.locals[tmp])
+  var local = addr current.locals[tmp]
 
   local.name = name
   local.depth = -1
@@ -288,7 +288,7 @@ proc declareVariable() =
   let name = parser.previous
 
   for i in countdown(current.localCount  - 1, 0):
-    let local = cast[ptr Local](addr current.locals[i])
+    let local = addr current.locals[i]
 
     if (local.depth != -1) and (local.depth < current.scopeDepth):
       break
