@@ -31,10 +31,10 @@ proc runFile(path: string) =
 
   let result = interpret(source)
 
-  if result == INTERPRET_COMPILE_ERROR:
+  if result == InterpretCompileError:
     quit(65)
 
-  if result == INTERPRET_RUNTIME_ERROR:
+  if result == InterpretRuntimeError:
     quit(70)
 
 proc main*() =

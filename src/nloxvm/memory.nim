@@ -2,14 +2,14 @@ import system/ansi_c
 
 import ./globals, ./types, ./value_helpers
 
-when defined(DEBUG_LOG_GC):
+when defined(debugLogGc):
   import std/strformat
 
   import ./printer
 
 import ./private/pointer_arithmetics
 
-const GC_HEAP_GROW_FACTOR {.intdefine.} = 2
+const gcHeapGrowFactor {.intdefine.} = 2
 
 proc freeChunk(chunk: var Chunk) {.importc: "freeChunk__nloxvmZchunk_u23".}
 proc collectGarbage*()
@@ -20,21 +20,21 @@ template allocate*[T](`type`: typedesc[T], count: untyped): ptr T =
 template free*[T](`type`: typedesc, `pointer`: T) =
   discard reallocate(`pointer`, sizeof(`type`), 0)
 
-template grow_capacity*[T](capacity: T): T =
+template growCapacity*[T](capacity: T): T =
   if capacity < 8: 8
   else: capacity * 2
 
-template grow_array*[T](`type`: typedesc, `pointer`: T, oldCount, newCount: untyped): T =
+template growArray*[T](`type`: typedesc, `pointer`: T, oldCount, newCount: untyped): T =
   cast[T](reallocate(`pointer`, sizeof(`type`) * oldCount, sizeof(`type`) * newCount))
 
-template free_array*[T](`type`: typedesc, `pointer`: T, oldCount: untyped) =
+template freeArray*[T](`type`: typedesc, `pointer`: T, oldCount: untyped) =
   discard reallocate(`pointer`, sizeof(`type`) * oldCount, 0)
 
 proc reallocate*(`pointer`: pointer, oldSize: int, newSize: int): pointer =
   vm.bytesAllocated += newSize - oldSize
 
   if newSize > oldSize:
-    when defined(DEBUG_STRESS_GC):
+    when defined(debugStressGc):
       collectGarbage()
 
     if vm.bytesAllocated > vm.nextGC:
@@ -56,7 +56,7 @@ proc markObject*(`object`: ptr Obj) =
   if `object`.isMarked:
     return
 
-  when defined(DEBUG_LOG_GC):
+  when defined(debugLogGc):
     write(stdout, fmt"{cast[uint](`object`)} mark ")
 
     printValue(objVal(`object`))
@@ -66,7 +66,7 @@ proc markObject*(`object`: ptr Obj) =
   `object`.isMarked = true
 
   if vm.grayCapacity < (vm.grayCount + 1):
-    vm.grayCapacity = grow_capacity(vm.grayCapacity)
+    vm.grayCapacity = growCapacity(vm.grayCapacity)
     vm.grayStack = cast[ptr ptr Obj](c_realloc(vm.grayStack, csize_t(sizeof(ptr Obj) * vm.grayCapacity)))
 
     if isNil(vm.grayStack):
@@ -96,7 +96,7 @@ proc markTable(table: var Table) =
 # end
 
 proc blackenObject(`object`: ptr Obj) =
-  when defined(DEBUG_LOG_GC):
+  when defined(debugLogGc):
     write(stdout, fmt"{cast[uint](`object`)} blacken ")
 
     printValue(objVal(`object`))
@@ -104,84 +104,84 @@ proc blackenObject(`object`: ptr Obj) =
     write(stdout, '\n')
 
   case `object`.`type`
-  of OBJT_BOUND_METHOD:
+  of ObjtBoundMethod:
     let bound = cast[ptr ObjBoundMethod](`object`)
 
     markValue(bound.receiver)
 
     markObject(cast[ptr Obj](bound.`method`))
-  of OBJT_CLASS:
+  of ObjtClass:
     let klass = cast[ptr ObjClass](`object`)
 
     markObject(cast[ptr Obj](klass.name))
 
     markTable(klass.methods)
-  of OBJT_CLOSURE:
+  of ObjtClosure:
     let closure = cast[ptr ObjClosure](`object`)
 
     markObject(cast[ptr Obj](closure.function))
 
     for i in 0 ..< closure.upvalueCount:
       markObject(cast[ptr Obj](closure.upvalues[i]))
-  of OBJT_FUNCTION:
+  of ObjtFunction:
     let function = cast[ptr ObjFunction](`object`)
 
     markObject(cast[ptr Obj](function.name))
 
     markArray(function.chunk.constants)
-  of OBJT_INSTANCE:
+  of ObjtInstance:
     let instance = cast[ptr ObjInstance](`object`)
 
     markObject(cast[ptr Obj](instance.klass))
 
     markTable(instance.fields)
-  of OBJT_UPVALUE:
+  of ObjtUpvalue:
     markValue(cast[ptr ObjUpvalue](`object`).closed)
-  of OBJT_NATIVE, OBJT_STRING:
+  of ObjtNative, ObjtString:
     discard
 
 from ./table import freeTable, tableRemoveWhite
 
 proc freeObject*(`object`: ptr Obj) =
-  when defined(DEBUG_LOG_GC):
+  when defined(debugLogGc):
     write(stdout, fmt"{cast[uint](`object`)} free type {ord(`object`.`type`)}{'\n'}")
 
   case `object`.`type`
-  of OBJT_BOUND_METHOD:
+  of ObjtBoundMethod:
     free(ObjBoundMethod, `object`)
-  of OBJT_CLASS:
+  of ObjtClass:
     let klass = cast[ptr ObjClass](`object`)
 
     freeTable(klass.methods)
 
     free(ObjClass, `object`)
-  of OBJT_CLOSURE:
+  of ObjtClosure:
     let closure = cast[ptr ObjClosure](`object`)
 
-    free_array(ptr ObjUpvalue, closure.upvalues, closure.upvalueCount)
+    freeArray(ptr ObjUpvalue, closure.upvalues, closure.upvalueCount)
 
     free(ObjClosure, `object`)
-  of OBJT_FUNCTION:
+  of ObjtFunction:
     let function = cast[ptr ObjFunction](`object`)
 
     freeChunk(function.chunk)
 
     free(ObjFunction, `object`)
-  of OBJT_INSTANCE:
+  of ObjtInstance:
     let instance = cast[ptr ObjInstance](`object`)
 
     freeTable(instance.fields)
 
     free(ObjInstance, `object`)
-  of OBJT_NATIVE:
+  of ObjtNative:
     free(ObjNative, `object`)
-  of OBJT_STRING:
+  of ObjtString:
     let string = cast[ptr ObjString](`object`)
 
-    free_array(char, string.chars, string.length + 1)
+    freeArray(char, string.chars, string.length + 1)
 
     free(ObjString, `object`)
-  of OBJT_UPVALUE:
+  of ObjtUpvalue:
     free(ObjUpvalue, `object`)
 
 # compiler.nim
@@ -247,7 +247,7 @@ proc sweep() =
       freeObject(unreached)
 
 proc collectGarbage*() =
-  when defined(DEBUG_LOG_GC):
+  when defined(debugLogGc):
     write(stdout, "-- gc begin\n")
 
     let before = vm.bytesAllocated
@@ -260,9 +260,9 @@ proc collectGarbage*() =
 
   sweep()
 
-  vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR
+  vm.nextGC = vm.bytesAllocated * gcHeapGrowFactor
 
-  when defined(DEBUG_LOG_GC):
+  when defined(debugLogGc):
     write(stdout, "-- gc end\n")
     write(stdout, fmt"   collected {before - vm.bytesAllocated} bytes (from {before} to {vm.bytesAllocated}) next at {vm.nextGC}{'\n'}")
 

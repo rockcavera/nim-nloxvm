@@ -2,12 +2,12 @@ import std/parseutils
 
 import ./chunk, ./common, ./globals, ./object, ./scanner, ./types, ./value_helpers
 
-when defined(DEBUG_PRINT_CODE):
+when defined(debugPrintCode):
   import ./debug
 
 import ./private/pointer_arithmetics
 
-const UINT16_MAX = high(uint16).int32
+const uint16Max = high(uint16).int32
 
 var
   parser: Parser
@@ -27,9 +27,9 @@ proc errorAt(token: var Token, message: ptr char) =
 
   write(stderr, "[line ", $token.line, "] Error")
 
-  if token.`type` == TOKEN_EOF:
+  if token.`type` == TokenEof:
     write(stderr, " at end")
-  elif token.`type` == TOKEN_ERROR:
+  elif token.`type` == TokenError:
     discard
   else:
     write(stderr, " at '")
@@ -62,7 +62,7 @@ proc advance() =
   while true:
     parser.current = scanToken()
 
-    if parser.current.`type` != TOKEN_ERROR:
+    if parser.current.`type` != TokenError:
       break
 
     errorAtCurrent(parser.current.start)
@@ -102,11 +102,11 @@ template emitBytes(opCode: OpCode, `byte`: uint8) =
   emitBytes(uint8(opCode), `byte`)
 
 proc emitLoop(loopStart: int32) =
-  emitByte(OP_LOOP)
+  emitByte(OpLoop)
 
   let offset = currentChunk().count - loopStart + 2
 
-  if offset > UINT16_MAX:
+  if offset > uint16Max:
     error("Loop body too large.")
 
   emitByte(uint8((offset shr 8) and 0xff))
@@ -123,31 +123,31 @@ template emitJump(instruction: OpCode): int32 =
   emitJump(uint8(instruction))
 
 proc emitReturn() =
-  if current.`type` == TYPE_INITIALIZER:
-    emitBytes(OP_GET_LOCAL, 0)
+  if current.`type` == TypeInitializer:
+    emitBytes(OpGetLocal, 0)
   else:
-    emitByte(OP_NIL)
+    emitByte(OpNil)
 
-  emitByte(OP_RETURN)
+  emitByte(OpReturn)
 
 proc makeConstant(value: Value): uint8 =
-  const UINT8_MAX = high(uint8).int32
+  const uint8Max = high(uint8).int32
 
   let constant = addConstant(currentChunk(), value)
 
-  if constant > UINT8_MAX:
+  if constant > uint8Max:
     error("Too many constants in one chunk.")
     return 0'u8
 
   uint8(constant)
 
 proc emitConstant(value: Value) =
-  emitBytes(OP_CONSTANT, makeConstant(value))
+  emitBytes(OpConstant, makeConstant(value))
 
 proc patchJump(offset: int32) =
   let jump = currentChunk().count - offset - 2
 
-  if jump > UINT16_MAX:
+  if jump > uint16Max:
     error("Too much code to jump over.")
 
   currentChunk().code[offset] = uint8((jump shr 8) and 0xff)
@@ -162,7 +162,7 @@ proc initCompiler(compiler: var Compiler, `type`: FunctionType) =
   compiler.function = newFunction()
   current = addr compiler
 
-  if `type` != TYPE_SCRIPT:
+  if `type` != TypeScript:
     current.function.name = copyString(parser.previous.start, parser.previous.length)
 
   var local = addr current.locals[current.localCount]
@@ -172,7 +172,7 @@ proc initCompiler(compiler: var Compiler, `type`: FunctionType) =
   local.depth = 0
   local.isCaptured = false
 
-  if `type` != TYPE_FUNCTION:
+  if `type` != TypeFunction:
     local.name.start = cast[ptr char](cstring"this")
     local.name.length = 4
   else:
@@ -184,7 +184,7 @@ proc endCompiler(): ptr ObjFunction =
 
   result = current.function
 
-  when defined(DEBUG_PRINT_CODE):
+  when defined(debugPrintCode):
     if not parser.hadError:
       disassembleChunk(currentChunk(),
                        if not isNil(result.name): result.name.chars
@@ -200,9 +200,9 @@ proc endScope() =
 
   while (current.localCount > 0) and (current.locals[current.localCount - 1].depth > current.scopeDepth):
     if current.locals[current.localCount - 1].isCaptured:
-      emitByte(OP_CLOSE_UPVALUE)
+      emitByte(OpCloseUpvalue)
     else:
-      emitByte(OP_POP)
+      emitByte(OpPop)
 
     dec(current.localCount)
 
@@ -242,7 +242,7 @@ proc addUpvalue(compiler: ptr Compiler, index: uint8, isLocal: bool): int32 =
     if upvalue.index == index and upvalue.isLocal == isLocal:
       return i
 
-  if upvalueCount == UINT8_COUNT:
+  if upvalueCount == uint8Count:
     error("Too many closure variables in function.")
     return 0
 
@@ -271,7 +271,7 @@ proc resolveUpvalue(compiler: ptr Compiler, name: Token): int32 =
   -1
 
 proc addLocal(name: Token) =
-  if current.localCount == UINT8_COUNT:
+  if current.localCount == uint8Count:
     error("Too many local variables in function.")
     return
 
@@ -303,7 +303,7 @@ proc declareVariable() =
   addLocal(name)
 
 proc parseVariable(errorMessage: string): uint8 =
-  consume(TOKEN_IDENTIFIER, errorMessage)
+  consume(TokenIdentifier, errorMessage)
 
   declareVariable()
 
@@ -323,10 +323,10 @@ proc defineVariable(global: uint8) =
     markInitialized()
     return
 
-  emitBytes(OP_DEFINE_GLOBAL, global)
+  emitBytes(OpDefineGlobal, global)
 
 proc argumentList(): uint8 =
-  if not check(TOKEN_RIGHT_PAREN):
+  if not check(TokenRightParen):
     while true:
       expression()
 
@@ -335,17 +335,17 @@ proc argumentList(): uint8 =
 
       inc(result)
 
-      if not match(TOKEN_COMMA):
+      if not match(TokenComma):
         break
 
-  consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.")
+  consume(TokenRightParen, "Expect ')' after arguments.")
 
 proc `and`(canAssign: bool) =
-  let endJump = emitJump(OP_JUMP_IF_FALSE)
+  let endJump = emitJump(OpJumpIfFalse)
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
-  parsePrecedence(PREC_AND)
+  parsePrecedence(PrecAnd)
 
   patchJump(endJump)
 
@@ -357,67 +357,67 @@ proc binary(canAssign: bool) =
   parsePrecedence(Precedence(ord(rule.precedence) + 1))
 
   case operatorType
-  of TOKEN_BANG_EQUAL:
-    emitBytes(OP_EQUAL, OP_NOT)
-  of TOKEN_EQUAL_EQUAL:
-    emitByte(OP_EQUAL)
-  of TOKEN_GREATER:
-    emitByte(OP_GREATER)
-  of TOKEN_GREATER_EQUAL:
-    emitBytes(OP_LESS, OP_NOT)
-  of TOKEN_LESS:
-    emitByte(OP_LESS)
-  of TOKEN_LESS_EQUAL:
-    emitBytes(OP_GREATER, OP_NOT)
-  of TOKEN_PLUS:
-    emitByte(OP_ADD)
-  of TOKEN_MINUS:
-    emitByte(OP_SUBTRACT)
-  of TOKEN_STAR:
-    emitByte(OP_MULTIPLY)
-  of TOKEN_SLASH:
-    emitByte(OP_DIVIDE)
+  of TokenBangEqual:
+    emitBytes(OpEqual, OpNot)
+  of TokenEqualEqual:
+    emitByte(OpEqual)
+  of TokenGreater:
+    emitByte(OpGreater)
+  of TokenGreaterEqual:
+    emitBytes(OpLess, OpNot)
+  of TokenLess:
+    emitByte(OpLess)
+  of TokenLessEqual:
+    emitBytes(OpGreater, OpNot)
+  of TokenPlus:
+    emitByte(OpAdd)
+  of TokenMinus:
+    emitByte(OpSubtract)
+  of TokenStar:
+    emitByte(OpMultiply)
+  of TokenSlash:
+    emitByte(OpDivide)
   else:
     discard
 
 proc call(canAssign: bool) =
   let argCount = argumentList()
 
-  emitBytes(OP_CALL, argCount)
+  emitBytes(OpCall, argCount)
 
 proc dot(canAssign: bool) =
-  consume(TOKEN_IDENTIFIER, "Expect property name after '.'.")
+  consume(TokenIdentifier, "Expect property name after '.'.")
 
   let name = identifierConstant(parser.previous)
 
-  if canAssign and match(TOKEN_EQUAL):
+  if canAssign and match(TokenEqual):
     expression()
 
-    emitBytes(OP_SET_PROPERTY, name)
-  elif match(TOKEN_LEFT_PAREN):
+    emitBytes(OpSetProperty, name)
+  elif match(TokenLeftParen):
     let argCount = argumentList()
 
-    emitBytes(OP_INVOKE, name)
+    emitBytes(OpInvoke, name)
 
     emitByte(argCount)
   else:
-    emitBytes(OP_GET_PROPERTY, name)
+    emitBytes(OpGetProperty, name)
 
 proc literal(canAssign: bool) =
   case parser.previous.`type`
-  of TOKEN_FALSE:
-    emitByte(OP_FALSE)
-  of TOKEN_NIL:
-    emitByte(OP_NIL)
-  of TOKEN_TRUE:
-    emitByte(OP_TRUE)
+  of TokenFalse:
+    emitByte(OpFalse)
+  of TokenNil:
+    emitByte(OpNil)
+  of TokenTrue:
+    emitByte(OpTrue)
   else:
     discard
 
 proc grouping(canAssign: bool) =
   expression()
 
-  consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.")
+  consume(TokenRightParen, "Expect ')' after expression.")
 
 proc number(canAssign: bool) =
   var value: float
@@ -428,14 +428,14 @@ proc number(canAssign: bool) =
 
 proc `or`(canAssign: bool) =
   let
-    elseJump = emitJump(OP_JUMP_IF_FALSE)
-    endJump = emitJump(OP_JUMP)
+    elseJump = emitJump(OpJumpIfFalse)
+    endJump = emitJump(OpJump)
 
   patchJump(elseJump)
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
-  parsePrecedence(PREC_OR)
+  parsePrecedence(PrecOr)
 
   patchJump(endJump)
 
@@ -449,20 +449,20 @@ proc namedVariable(name: Token, canAssign: bool) =
     arg = resolveLocal(current, name)
 
   if arg != -1:
-    getOp = OP_GET_LOCAL
-    setOp = OP_SET_LOCAL
+    getOp = OpGetLocal
+    setOp = OpSetLocal
   else:
     arg = resolveUpvalue(current, name)
 
     if arg != -1:
-      getOp = OP_GET_UPVALUE
-      setOp = OP_SET_UPVALUE
+      getOp = OpGetUpvalue
+      setOp = OpSetUpvalue
     else:
       arg = identifierConstant(name).int32
-      getOp = OP_GET_GLOBAL
-      setOp = OP_SET_GLOBAL
+      getOp = OpGetGlobal
+      setOp = OpSetGlobal
 
-  if canAssign and match(TOKEN_EQUAL):
+  if canAssign and match(TokenEqual):
     expression()
 
     emitBytes(setOp, uint8(arg))
@@ -482,23 +482,23 @@ proc super(canAssign: bool) =
   elif not currentClass.hasSuperclass:
     error("Can't use 'super' in a class with no superclass.")
 
-  consume(TOKEN_DOT, "Expect '.' after 'super'.")
-  consume(TOKEN_IDENTIFIER, "Expect superclass method name.")
+  consume(TokenDot, "Expect '.' after 'super'.")
+  consume(TokenIdentifier, "Expect superclass method name.")
 
   let name = identifierConstant(parser.previous)
 
   namedVariable(syntheticToken(cstring"this"), false)
 
-  if match(TOKEN_LEFT_PAREN):
+  if match(TokenLeftParen):
     let argCount = argumentList()
 
     namedVariable(syntheticToken(cstring"super"), false)
 
-    emitBytes(OP_SUPER_INVOKE, name)
+    emitBytes(OpSuperInvoke, name)
     emitByte(argCount)
   else:
     namedVariable(syntheticToken(cstring"super"), false)
-    emitBytes(OP_GET_SUPER, name)
+    emitBytes(OpGetSuper, name)
 
 proc this(canAssign: bool) =
   if isNil(currentClass):
@@ -510,57 +510,57 @@ proc this(canAssign: bool) =
 proc unary(canAssign: bool) =
   let operatorType = parser.previous.`type`
 
-  parsePrecedence(PREC_UNARY)
+  parsePrecedence(PrecUnary)
 
   case operatorType
-  of TOKEN_BANG:
-    emitByte(OP_NOT)
-  of TOKEN_MINUS:
-    emitByte(OP_NEGATE)
+  of TokenBang:
+    emitByte(OpNot)
+  of TokenMinus:
+    emitByte(OpNegate)
   else:
     discard
 
 let rules: array[40, ParseRule] = [
-  ParseRule(prefix: grouping, infix: call, precedence: PREC_CALL), # TOKEN_LEFT_PAREN
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RIGHT_PAREN
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_LEFT_BRACE
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RIGHT_BRACE
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_COMMA
-  ParseRule(prefix: nil, infix: dot, precedence: PREC_CALL),      # TOKEN_DOT
-  ParseRule(prefix: unary, infix: binary, precedence: PREC_TERM), # TOKEN_MINUS
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_TERM),   # TOKEN_PLUS
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_SEMICOLON
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_FACTOR), # TOKEN_SLASH
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_FACTOR), # TOKEN_STAR
-  ParseRule(prefix: unary, infix: nil, precedence: PREC_NONE),    # TOKEN_BANG
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_EQUALITY), # TOKEN_BANG_EQUAL
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_EQUAL
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_EQUALITY), # TOKEN_EQUAL_EQUAL
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_GREATER
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_GREATER_EQUAL
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_LESS
-  ParseRule(prefix: nil, infix: binary, precedence: PREC_COMPARISON), # TOKEN_LESS_EQUAL
-  ParseRule(prefix: variable, infix: nil, precedence: PREC_NONE),      # TOKEN_IDENTIFIER
-  ParseRule(prefix: string, infix: nil, precedence: PREC_NONE),      # TOKEN_STRING
-  ParseRule(prefix: number, infix: nil, precedence: PREC_NONE),   # TOKEN_NUMBER
-  ParseRule(prefix: nil, infix: `and`, precedence: PREC_AND),      # TOKEN_AND
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_CLASS
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_ELSE
-  ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_FALSE
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_FOR
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_FUN
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_IF
-  ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_NIL
-  ParseRule(prefix: nil, infix: `or`, precedence: PREC_OR),      # TOKEN_OR
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_PRINT
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_RETURN
-  ParseRule(prefix: super, infix: nil, precedence: PREC_NONE),      # TOKEN_SUPER
-  ParseRule(prefix: this, infix: nil, precedence: PREC_NONE),      # TOKEN_THIS
-  ParseRule(prefix: literal, infix: nil, precedence: PREC_NONE),  # TOKEN_TRUE
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_VAR
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_WHILE
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE),      # TOKEN_ERROR
-  ParseRule(prefix: nil, infix: nil, precedence: PREC_NONE)       # TOKEN_EOF
+  ParseRule(prefix: grouping, infix: call, precedence: PrecCall),    # TokenLeftParen
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenRightParen
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenLeftBrace
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenRightBrace
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenComma
+  ParseRule(prefix: nil, infix: dot, precedence: PrecCall),          # TokenDot
+  ParseRule(prefix: unary, infix: binary, precedence: PrecTerm),     # TokenMinus
+  ParseRule(prefix: nil, infix: binary, precedence: PrecTerm),       # TokenPlus
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenSemicolon
+  ParseRule(prefix: nil, infix: binary, precedence: PrecFactor),     # TokenSlash
+  ParseRule(prefix: nil, infix: binary, precedence: PrecFactor),     # TokenStar
+  ParseRule(prefix: unary, infix: nil, precedence: PrecNone),        # TokenBang
+  ParseRule(prefix: nil, infix: binary, precedence: PrecEquality),   # TokenBangEqual
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenEqual
+  ParseRule(prefix: nil, infix: binary, precedence: PrecEquality),   # TokenEqualEqual
+  ParseRule(prefix: nil, infix: binary, precedence: PrecComparison), # TokenGreater
+  ParseRule(prefix: nil, infix: binary, precedence: PrecComparison), # TokenGreaterEqual
+  ParseRule(prefix: nil, infix: binary, precedence: PrecComparison), # TokenLess
+  ParseRule(prefix: nil, infix: binary, precedence: PrecComparison), # TokenLessEqual
+  ParseRule(prefix: variable, infix: nil, precedence: PrecNone),     # TokenIdentifier
+  ParseRule(prefix: string, infix: nil, precedence: PrecNone),       # TokenString
+  ParseRule(prefix: number, infix: nil, precedence: PrecNone),       # TokenNumber
+  ParseRule(prefix: nil, infix: `and`, precedence: PrecAnd),         # TokenAnd
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenClass
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenElse
+  ParseRule(prefix: literal, infix: nil, precedence: PrecNone),      # TokenFalse
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenFor
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenFun
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenIf
+  ParseRule(prefix: literal, infix: nil, precedence: PrecNone),      # TokenNil
+  ParseRule(prefix: nil, infix: `or`, precedence: PrecOr),           # TokenOr
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenPrint
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenReturn
+  ParseRule(prefix: super, infix: nil, precedence: PrecNone),        # TokenSuper
+  ParseRule(prefix: this, infix: nil, precedence: PrecNone),         # TokenThis
+  ParseRule(prefix: literal, infix: nil, precedence: PrecNone),      # TokenTrue
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenVar
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenWhile
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenError
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone)           # TokenEof
 ]
 
 proc parsePrecedence(precedence: Precedence) =
@@ -572,7 +572,7 @@ proc parsePrecedence(precedence: Precedence) =
     error("Expect expression.")
     return
 
-  let canAssign = precedence <= PREC_ASSIGNMENT
+  let canAssign = precedence <= PrecAssignment
 
   prefixRule(canAssign)
 
@@ -583,20 +583,20 @@ proc parsePrecedence(precedence: Precedence) =
 
     infixRule(canAssign)
 
-  if canAssign and match(TOKEN_EQUAL):
+  if canAssign and match(TokenEqual):
     error("Invalid assignment target.")
 
 proc getRule(`type`: TokenType): ptr ParseRule =
   addr rules[ord(`type`)]
 
 proc expression() =
-  parsePrecedence(PREC_ASSIGNMENT)
+  parsePrecedence(PrecAssignment)
 
 proc `block`() =
-  while not(check(TOKEN_RIGHT_BRACE)) and not(check(TOKEN_EOF)):
+  while not(check(TokenRightBrace)) and not(check(TokenEof)):
     declaration()
 
-  consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.")
+  consume(TokenRightBrace, "Expect '}' after block.")
 
 proc function(`type`: FunctionType) =
   var compiler: Compiler
@@ -605,9 +605,9 @@ proc function(`type`: FunctionType) =
 
   beginScope()
 
-  consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.")
+  consume(TokenLeftParen, "Expect '(' after function name.")
 
-  if not check(TOKEN_RIGHT_PAREN):
+  if not check(TokenRightParen):
     while true:
       inc(current.function.arity)
 
@@ -618,38 +618,38 @@ proc function(`type`: FunctionType) =
 
       defineVariable(constant)
 
-      if not match(TOKEN_COMMA):
+      if not match(TokenComma):
         break
 
-  consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.")
-  consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.")
+  consume(TokenRightParen, "Expect ')' after parameters.")
+  consume(TokenLeftBrace, "Expect '{' before function body.")
 
   `block`()
 
   let function = endCompiler()
 
-  emitBytes(OP_CLOSURE, makeConstant(objVal(function)))
+  emitBytes(OpClosure, makeConstant(objVal(function)))
 
   for i in 0 ..< function.upvalueCount:
     emitByte(if compiler.upvalues[i].isLocal: 1 else: 0)
     emitByte(compiler.upvalues[i].index)
 
 proc `method`() =
-  consume(TOKEN_IDENTIFIER, "Expect method name.")
+  consume(TokenIdentifier, "Expect method name.")
 
   let constant = identifierConstant(parser.previous)
 
-  var `type` = TYPE_METHOD
+  var `type` = TypeMethod
 
   if parser.previous.length == 4 and cmpMem(parser.previous.start, cstring"init", 4) == 0:
-    `type` = TYPE_INITIALIZER
+    `type` = TypeInitializer
 
   function(`type`)
 
-  emitBytes(OP_METHOD, constant)
+  emitBytes(OpMethod, constant)
 
 proc classDeclaration() =
-  consume(TOKEN_IDENTIFIER, "Expect class name.")
+  consume(TokenIdentifier, "Expect class name.")
 
   let
     className = parser.previous
@@ -657,7 +657,7 @@ proc classDeclaration() =
 
   declareVariable()
 
-  emitBytes(OP_CLASS, nameConstant)
+  emitBytes(OpClass, nameConstant)
 
   defineVariable(nameConstant)
 
@@ -667,8 +667,8 @@ proc classDeclaration() =
   classCompiler.enclosing = currentClass
   currentClass = addr classCompiler
 
-  if match(TOKEN_LESS):
-    consume(TOKEN_IDENTIFIER, "Expect superclass name.")
+  if match(TokenLess):
+    consume(TokenIdentifier, "Expect superclass name.")
 
     variable(false)
 
@@ -683,20 +683,20 @@ proc classDeclaration() =
 
     namedVariable(className, false)
 
-    emitByte(OP_INHERIT)
+    emitByte(OpInherit)
 
     classCompiler.hasSuperclass = true
 
   namedVariable(className, false)
 
-  consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.")
+  consume(TokenLeftBrace, "Expect '{' before class body.")
 
-  while not(check(TOKEN_RIGHT_BRACE)) and not(check(TOKEN_EOF)):
+  while not(check(TokenRightBrace)) and not(check(TokenEof)):
     `method`()
 
-  consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.")
+  consume(TokenRightBrace, "Expect '}' after class body.")
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
   if classCompiler.hasSuperclass:
     endScope()
@@ -708,37 +708,37 @@ proc funDeclaration() =
 
   markInitialized()
 
-  function(TYPE_FUNCTION)
+  function(TypeFunction)
 
   defineVariable(global)
 
 proc varDeclaration() =
   let global = parseVariable("Expect variable name.")
 
-  if match(TOKEN_EQUAL):
+  if match(TokenEqual):
     expression()
   else:
-    emitByte(OP_NIL)
+    emitByte(OpNil)
 
-  consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.")
+  consume(TokenSemicolon, "Expect ';' after variable declaration.")
 
   defineVariable(global)
 
 proc expressionStatement() =
   expression()
 
-  consume(TOKEN_SEMICOLON, "Expect ';' after expression.")
+  consume(TokenSemicolon, "Expect ';' after expression.")
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
 proc forStatement() =
   beginScope()
 
-  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.")
+  consume(TokenLeftParen, "Expect '(' after 'for'.")
 
-  if match(TOKEN_SEMICOLON):
+  if match(TokenSemicolon):
     discard
-  elif match(TOKEN_VAR):
+  elif match(TokenVar):
     varDeclaration()
   else:
     expressionStatement()
@@ -747,25 +747,25 @@ proc forStatement() =
 
   var exitJump = -1'i32
 
-  if not match(TOKEN_SEMICOLON):
+  if not match(TokenSemicolon):
     expression()
 
-    consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.")
+    consume(TokenSemicolon, "Expect ';' after loop condition.")
 
-    exitJump = emitJump(OP_JUMP_IF_FALSE)
+    exitJump = emitJump(OpJumpIfFalse)
 
-    emitByte(OP_POP)
+    emitByte(OpPop)
 
-  if not match(TOKEN_RIGHT_PAREN):
+  if not match(TokenRightParen):
     let
-      bodyJump = emitJump(OP_JUMP)
+      bodyJump = emitJump(OpJump)
       incrementStart = currentChunk().count
 
     expression()
 
-    emitByte(OP_POP)
+    emitByte(OpPop)
 
-    consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.")
+    consume(TokenRightParen, "Expect ')' after for clauses.")
 
     emitLoop(loopStart)
 
@@ -780,30 +780,30 @@ proc forStatement() =
   if exitJump != -1:
     patchJump(exitJump)
 
-    emitByte(OP_POP)
+    emitByte(OpPop)
 
   endScope()
 
 proc ifStatement() =
-  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.")
+  consume(TokenLeftParen, "Expect '(' after 'if'.")
 
   expression()
 
-  consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.")
+  consume(TokenRightParen, "Expect ')' after condition.")
 
-  let thenJump = emitJump(OP_JUMP_IF_FALSE)
+  let thenJump = emitJump(OpJumpIfFalse)
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
   statement()
 
-  let elseJump = emitJump(OP_JUMP)
+  let elseJump = emitJump(OpJump)
 
   patchJump(thenJump)
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
-  if match(TOKEN_ELSE):
+  if match(TokenElse):
     statement()
 
   patchJump(elseJump)
@@ -811,38 +811,38 @@ proc ifStatement() =
 proc printStatement() =
   expression()
 
-  consume(TOKEN_SEMICOLON, "Expect ';' after value.")
+  consume(TokenSemicolon, "Expect ';' after value.")
 
-  emitByte(OP_PRINT)
+  emitByte(OpPrint)
 
 proc returnStatement() =
-  if current.`type` == TYPE_SCRIPT:
+  if current.`type` == TypeScript:
     error("Can't return from top-level code.")
 
-  if match(TOKEN_SEMICOLON):
+  if match(TokenSemicolon):
     emitReturn()
   else:
-    if current.`type` == TYPE_INITIALIZER:
+    if current.`type` == TypeInitializer:
       error("Can't return a value from an initializer.")
 
     expression()
 
-    consume(TOKEN_SEMICOLON, "Expect ';' after return value.")
+    consume(TokenSemicolon, "Expect ';' after return value.")
 
-    emitByte(OP_RETURN)
+    emitByte(OpReturn)
 
 proc whileStatement() =
   let loopStart = currentChunk().count
 
-  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.")
+  consume(TokenLeftParen, "Expect '(' after 'while'.")
 
   expression()
 
-  consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.")
+  consume(TokenRightParen, "Expect ')' after condition.")
 
-  let exitJump = emitJump(OP_JUMP_IF_FALSE)
+  let exitJump = emitJump(OpJumpIfFalse)
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
   statement()
 
@@ -850,17 +850,17 @@ proc whileStatement() =
 
   patchJump(exitJump)
 
-  emitByte(OP_POP)
+  emitByte(OpPop)
 
 proc synchronize() =
   parser.panicMode = false
 
-  while parser.current.`type` != TOKEN_EOF:
-    if parser.previous.`type` == TOKEN_SEMICOLON:
+  while parser.current.`type` != TokenEof:
+    if parser.previous.`type` == TokenSemicolon:
       return
 
     case parser.current.`type`:
-    of TOKEN_CLASS, TOKEN_FUN, TOKEN_VAR, TOKEN_FOR, TOKEN_IF, TOKEN_WHILE, TOKEN_PRINT, TOKEN_RETURN:
+    of TokenClass, TokenFun, TokenVar, TokenFor, TokenIf, TokenWhile, TokenPrint, TokenReturn:
       return
     else:
       discard
@@ -868,11 +868,11 @@ proc synchronize() =
     advance()
 
 proc declaration() =
-  if match(TOKEN_CLASS):
+  if match(TokenClass):
     classDeclaration()
-  elif match(TOKEN_FUN):
+  elif match(TokenFun):
     funDeclaration()
-  elif match(TOKEN_VAR):
+  elif match(TokenVar):
     varDeclaration()
   else:
     statement()
@@ -881,17 +881,17 @@ proc declaration() =
     synchronize()
 
 proc statement() =
-  if match(TOKEN_PRINT):
+  if match(TokenPrint):
     printStatement()
-  elif match(TOKEN_FOR):
+  elif match(TokenFor):
     forStatement()
-  elif match(TOKEN_IF):
+  elif match(TokenIf):
     ifStatement()
-  elif match(TOKEN_RETURN):
+  elif match(TokenReturn):
     returnStatement()
-  elif match(TOKEN_WHILE):
+  elif match(TokenWhile):
     whileStatement()
-  elif match(TOKEN_LEFT_BRACE):
+  elif match(TokenLeftBrace):
     beginScope()
 
     `block`()
@@ -905,14 +905,14 @@ proc compile*(source: var string): ptr ObjFunction =
 
   var compiler: Compiler
 
-  initCompiler(compiler, TYPE_SCRIPT)
+  initCompiler(compiler, TypeScript)
 
   parser.hadError = false
   parser.panicMode = false
 
   advance()
 
-  while not match(TOKEN_EOF):
+  while not match(TokenEof):
     declaration()
 
   let function = endCompiler()

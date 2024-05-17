@@ -2,7 +2,7 @@ import ./memory, ./types, ./value_helpers
 
 import ./private/pointer_arithmetics
 
-const TABLE_MAX_LOAD = 0.75'f32
+const tableMaxLoad = 0.75'f32
 
 proc initTable*(table: var Table) =
   table.count = 0
@@ -10,7 +10,7 @@ proc initTable*(table: var Table) =
   table.entries = nil
 
 proc freeTable*(table: var Table) =
-  free_array(Entry, table.entries, table.capacity)
+  freeArray(Entry, table.entries, table.capacity)
   initTable(table)
 
 proc findEntry(entries: ptr Entry, capacity: int32, key: ptr ObjString): ptr Entry =
@@ -67,14 +67,14 @@ proc adjustCapacity(table: var Table, capacity: int32) =
 
     inc(table.count)
 
-  free_array(Entry, table.entries, table.capacity)
+  freeArray(Entry, table.entries, table.capacity)
 
   table.entries = entries
   table.capacity = capacity
 
 proc tableSet*(table: var Table, key: ptr ObjString, value: Value): bool =
-  if float32(table.count + 1) > (float32(table.capacity) * TABLE_MAX_LOAD):
-    let capacity = grow_capacity(table.capacity)
+  if float32(table.count + 1) > (float32(table.capacity) * tableMaxLoad):
+    let capacity = growCapacity(table.capacity)
 
     adjustCapacity(table, capacity)
 

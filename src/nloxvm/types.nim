@@ -1,20 +1,20 @@
 import ./common
 
 const
-  FRAMES_MAX* = 64
-  STACK_MAX = (FRAMES_MAX * UINT8_COUNT)
+  framesMax* = 64
+  stackMax = (framesMax * uint8Count)
 
 type
   # object.nim
   ObjType* = enum
-    OBJT_BOUND_METHOD,
-    OBJT_CLASS,
-    OBJT_CLOSURE,
-    OBJT_FUNCTION,
-    OBJT_INSTANCE,
-    OBJT_NATIVE,
-    OBJT_STRING,
-    OBJT_UPVALUE
+    ObjtBoundMethod
+    ObjtClass
+    ObjtClosure
+    ObjtFunction
+    ObjtInstance
+    ObjtNative
+    ObjtString
+    ObjtUpvalue
 
   Obj* = object
     `type`*: ObjType
@@ -26,23 +26,23 @@ type
   # value.nim
 
   ValueType* = enum
-    VAL_BOOL,
-    VAL_NIL,
-    VAL_NUMBER,
-    VAL_OBJ
+    ValBool
+    ValNil
+    ValNumber
+    ValObj
 
-when NAN_BOXING:
+when nanBoxing:
   type
     Value* = uint64
 else:
   type
     Value* = object
       case `type`*: ValueType
-      of VAL_BOOL:
+      of ValBool:
         boolean*: bool
-      of VAL_NIL, VAL_NUMBER:
+      of ValNil, ValNumber:
         number*: float
-      of VAL_OBJ:
+      of ValObj:
         obj*: ptr Obj
 
 type
@@ -57,43 +57,43 @@ type
   # chunk.nim
 
   OpCode* {.size: 1.} = enum
-    OP_CONSTANT,
-    OP_NIL,
-    OP_TRUE,
-    OP_FALSE,
-    OP_POP,
-    OP_GET_LOCAL,
-    OP_SET_LOCAL,
-    OP_GET_GLOBAL,
-    OP_DEFINE_GLOBAL,
-    OP_SET_GLOBAL,
-    OP_GET_UPVALUE,
-    OP_SET_UPVALUE,
-    OP_GET_PROPERTY,
-    OP_SET_PROPERTY,
-    OP_GET_SUPER,
-    OP_EQUAL,
-    OP_GREATER,
-    OP_LESS,
-    OP_ADD,
-    OP_SUBTRACT,
-    OP_MULTIPLY,
-    OP_DIVIDE,
-    OP_NOT,
-    OP_NEGATE,
-    OP_PRINT,
-    OP_JUMP,
-    OP_JUMP_IF_FALSE,
-    OP_LOOP,
-    OP_CALL,
-    OP_INVOKE,
-    OP_SUPER_INVOKE,
-    OP_CLOSURE,
-    OP_CLOSE_UPVALUE,
-    OP_RETURN,
-    OP_CLASS,
-    OP_INHERIT,
-    OP_METHOD
+    OpConstant
+    OpNil
+    OpTrue
+    OpFalse
+    OpPop
+    OpGetLocal
+    OpSetLocal
+    OpGetGlobal
+    OpDefineGlobal
+    OpSetGlobal
+    OpGetUpvalue
+    OpSetUpvalue
+    OpGetProperty
+    OpSetProperty
+    OpGetSuper
+    OpEqual
+    OpGreater
+    OpLess
+    OpAdd
+    OpSubtract
+    OpMultiply
+    OpDivide
+    OpNot
+    OpNegate
+    OpPrint
+    OpJump
+    OpJumpIfFalse
+    OpLoop
+    OpCall
+    OpInvoke
+    OpSuperInvoke
+    OpClosure
+    OpCloseUpvalue
+    OpReturn
+    OpClass
+    OpInherit
+    OpMethod
 
   Chunk* = object
     count*: int32
@@ -113,17 +113,17 @@ type
     panicMode*: bool
 
   Precedence* = enum
-    PREC_NONE,
-    PREC_ASSIGNMENT,  # =
-    PREC_OR,          # or
-    PREC_AND,         # and
-    PREC_EQUALITY,    # == !=
-    PREC_COMPARISON,  # < > <= >=
-    PREC_TERM,        # + -
-    PREC_FACTOR,      # * /
-    PREC_UNARY,       # ! -
-    PREC_CALL,        # . ()
-    PREC_PRIMARY
+    PrecNone
+    PrecAssignment  # =
+    PrecOr          # or
+    PrecAnd         # and
+    PrecEquality    # == !=
+    PrecComparison  # < > <= >=
+    PrecTerm        # + -
+    PrecFactor      # * /
+    PrecUnary       # ! -
+    PrecCall        # . ()
+    PrecPrimary
 
   ParseFn* = proc(canAssign: bool) {.nimcall.}
 
@@ -142,18 +142,18 @@ type
     isLocal*: bool
 
   FunctionType* = enum
-    TYPE_FUNCTION,
-    TYPE_INITIALIZER,
-    TYPE_METHOD,
-    TYPE_SCRIPT
+    TypeFunction
+    TypeInitializer
+    TypeMethod
+    TypeScript
 
   Compiler* = object
     enclosing*: ptr Compiler
     function*: ptr ObjFunction
     `type`*: FunctionType
-    locals*: array[UINT8_COUNT, Local]
+    locals*: array[uint8Count, Local]
     localCount*: int32
-    upvalues*: array[UINT8_COUNT, Upvalue]
+    upvalues*: array[uint8Count, Upvalue]
     scopeDepth*: int32
 
   ClassCompiler* = object
@@ -216,50 +216,50 @@ type
 
   TokenType* = enum
     # Single-character tokens.
-    TOKEN_LEFT_PAREN,
-    TOKEN_RIGHT_PAREN,
-    TOKEN_LEFT_BRACE,
-    TOKEN_RIGHT_BRACE,
-    TOKEN_COMMA,
-    TOKEN_DOT,
-    TOKEN_MINUS,
-    TOKEN_PLUS,
-    TOKEN_SEMICOLON,
-    TOKEN_SLASH,
-    TOKEN_STAR,
+    TokenLeftParen
+    TokenRightParen
+    TokenLeftBrace
+    TokenRightBrace
+    TokenComma
+    TokenDot
+    TokenMinus
+    TokenPlus
+    TokenSemicolon
+    TokenSlash
+    TokenStar
     # One or two character tokens.
-    TOKEN_BANG,
-    TOKEN_BANG_EQUAL,
-    TOKEN_EQUAL,
-    TOKEN_EQUAL_EQUAL,
-    TOKEN_GREATER,
-    TOKEN_GREATER_EQUAL,
-    TOKEN_LESS,
-    TOKEN_LESS_EQUAL,
+    TokenBang
+    TokenBangEqual
+    TokenEqual
+    TokenEqualEqual
+    TokenGreater
+    TokenGreaterEqual
+    TokenLess
+    TokenLessEqual
     # Literals.
-    TOKEN_IDENTIFIER,
-    TOKEN_STRING,
-    TOKEN_NUMBER,
+    TokenIdentifier
+    TokenString
+    TokenNumber
     # Keywords.
-    TOKEN_AND,
-    TOKEN_CLASS,
-    TOKEN_ELSE,
-    TOKEN_FALSE,
-    TOKEN_FOR,
-    TOKEN_FUN,
-    TOKEN_IF,
-    TOKEN_NIL,
-    TOKEN_OR,
-    TOKEN_PRINT,
-    TOKEN_RETURN,
-    TOKEN_SUPER,
-    TOKEN_THIS,
-    TOKEN_TRUE,
-    TOKEN_VAR,
-    TOKEN_WHILE,
+    TokenAnd
+    TokenClass
+    TokenElse
+    TokenFalse
+    TokenFor
+    TokenFun
+    TokenIf
+    TokenNil
+    TokenOr
+    TokenPrint
+    TokenReturn
+    TokenSuper
+    TokenThis
+    TokenTrue
+    TokenVar
+    TokenWhile
 
-    TOKEN_ERROR,
-    TOKEN_EOF
+    TokenError
+    TokenEof
 
   Token* = object
     `type`*: TokenType
@@ -282,10 +282,10 @@ type
     slots*: ptr Value
 
   VM* = object
-    frames*: array[FRAMES_MAX, CallFrame]
+    frames*: array[framesMax, CallFrame]
     frameCount*: int32
 
-    stack*: array[STACK_MAX, Value]
+    stack*: array[stackMax, Value]
     stackTop*: ptr Value
     globals*: Table
     strings*: Table
@@ -300,9 +300,9 @@ type
     grayStack*: ptr ptr Obj
 
   InterpretResult* = enum
-    INTERPRET_OK,
-    INTERPRET_COMPILE_ERROR,
-    INTERPRET_RUNTIME_ERROR
+    InterpretOk
+    InterpretCompileError
+    InterpretRuntimeError
 
   # end
 

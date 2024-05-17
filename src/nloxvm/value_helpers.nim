@@ -2,17 +2,17 @@ import ./common, ./types
 
 # value.nim
 
-when NAN_BOXING:
+when nanBoxing:
   const
-    SIGN_BIT = 0x8000000000000000'u64
-    QNAN = 0x7ffc000000000000'u64
+    signBit = 0x8000000000000000'u64
+    qnan = 0x7ffc000000000000'u64
 
-    TAG_NIL = 1
-    TAG_FALSE = 2
-    TAG_TRUE = 3
+    tagNil = 1
+    tagFalse = 2
+    tagTrue = 3
 
-    falseVal = Value(QNAN or TAG_FALSE)
-    trueVal = Value(QNAN or TAG_TRUE)
+    falseVal = Value(qnan or tagFalse)
+    trueVal = Value(qnan or tagTrue)
 
   template isBool*(value: Value): bool =
     (value or 1) == trueVal
@@ -21,10 +21,10 @@ when NAN_BOXING:
     value == nilVal
 
   template isNumber*(value: Value): bool =
-    (value and QNAN) != QNAN
+    (value and qnan) != qnan
 
   template isObj*(value: Value): bool =
-    (value and (QNAN or SIGN_BIT)) == (QNAN or SIGN_BIT)
+    (value and (qnan or signBit)) == (qnan or signBit)
 
   template asBool*(value: Value): bool =
     value == trueVal
@@ -33,43 +33,43 @@ when NAN_BOXING:
     valueToNum(value)
 
   template asObj*(value: Value): ptr Obj =
-    cast[ptr Obj](value and not(SIGN_BIT or QNAN))
+    cast[ptr Obj](value and not(signBit or qnan))
 
   template boolVal*(b: bool): Value =
     if b: trueVal
     else: falseVal
 
-  const nilVal* = Value(QNAN or TAG_NIL)
+  const nilVal* = Value(qnan or tagNil)
 
   template numberVal*(num: float): Value =
     numToValue(num)
 
   template objVal*[T: Obj|ObjFunction|ObjNative|ObjString|ObjUpvalue|ObjClosure|ObjClass|ObjInstance|ObjBoundMethod](obj: ptr T): Value =
-    Value(SIGN_BIT or QNAN or cast[uint64](obj))
+    Value(signBit or qnan or cast[uint64](obj))
 
   proc valueToNum*(value: Value): float {.inline.} =
-    when defined(NAN_BOXING_WITH_CAST):
+    when defined(nanBoxingWithCast):
       cast[float](value) # for compilers that do not optimize `copyMem()`
     else:
       copyMem(addr result, addr value, sizeof(Value))
 
   proc numToValue*(num: float): Value {.inline.} =
-    when defined(NAN_BOXING_WITH_CAST):
+    when defined(nanBoxingWithCast):
       cast[Value](num) # for compilers that do not optimize `copyMem()`
     else:
       copyMem(addr result, addr num, sizeof(float))
 else:
   template isBool*(value: Value): bool =
-    value.`type` == VAL_BOOL
+    value.`type` == ValBool
 
   template isNil*(value: Value): bool =
-    value.`type` == VAL_NIL
+    value.`type` == ValNil
 
   template isNumber*(value: Value): bool =
-    value.`type` == VAL_NUMBER
+    value.`type` == ValNumber
 
   template isObj*(value: Value): bool =
-    value.`type` == VAL_OBJ
+    value.`type` == ValObj
 
   template asObj*(value: Value): ptr Obj =
     value.obj
@@ -81,17 +81,17 @@ else:
     value.number
 
   template boolVal*(value: bool): Value =
-    Value(`type`: VAL_BOOL, boolean: value)
+    Value(`type`: ValBool, boolean: value)
 
-  const nilVal* = Value(`type`: VAL_NIL, number: 0.0'f)
+  const nilVal* = Value(`type`: ValNil, number: 0.0'f)
 
   template numberVal*(value: float): Value =
-    Value(`type`: VAL_NUMBER, number: value)
+    Value(`type`: ValNumber, number: value)
 
   template objVal*[T: Obj|ObjFunction|ObjNative|ObjString|ObjUpvalue|ObjClosure|ObjClass|ObjInstance|ObjBoundMethod](`object`: ptr T): Value =
     when T is Obj:
-      Value(`type`: VAL_OBJ, obj: `object`)
+      Value(`type`: ValObj, obj: `object`)
     else:
-      Value(`type`: VAL_OBJ, obj: cast[ptr Obj](`object`))
+      Value(`type`: ValObj, obj: cast[ptr Obj](`object`))
 
 # end

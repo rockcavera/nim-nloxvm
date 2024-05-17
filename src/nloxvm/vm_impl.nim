@@ -2,7 +2,7 @@ import std/[strutils, times]
 
 import ./compiler, ./globals, ./memory, ./object, ./object_helpers, ./printer, ./table, ./types, ./value, ./value_helpers
 
-when defined(DEBUG_TRACE_EXECUTION):
+when defined(debugTraceExecution):
   import ./debug
 
 import ./private/pointer_arithmetics
@@ -105,7 +105,7 @@ proc call(closure: ptr ObjClosure, argCount: int32): bool =
     runtimeError("Expected $1 arguments but got $2.", closure.function.arity, argCount)
     return false
 
-  if vm.frameCount == FRAMES_MAX:
+  if vm.frameCount == framesMax:
     runtimeError("Stack overflow.")
     return false
 
@@ -122,12 +122,12 @@ proc call(closure: ptr ObjClosure, argCount: int32): bool =
 proc callValue(callee: Value, argCount: int32): bool =
   if isObj(callee):
     case objType(callee)
-    of OBJT_BOUND_METHOD:
+    of ObjtBoundMethod:
       let bound = asBoundMethod(callee)
 
       vm.stackTop[-argCount - 1] = bound.receiver
       return call(bound.`method`, argCount)
-    of OBJT_CLASS:
+    of ObjtClass:
       let klass = asClass(callee)
 
       vm.stackTop[-argCount - 1] = objVal(newInstance(klass))
@@ -141,9 +141,9 @@ proc callValue(callee: Value, argCount: int32): bool =
         return false
 
       return true
-    of OBJT_CLOSURE:
+    of ObjtClosure:
       return call(asClosure(callee), argCount)
-    of OBJT_NATIVE:
+    of ObjtNative:
       let
         native = asNative(callee)
         res = native(argCount, vm.stackTop - argCount)
@@ -285,7 +285,7 @@ template readString(): ptr ObjString =
 template binaryOp(valueType: untyped, op: untyped) =
   if not(isNumber(peek(0))) or not(isNumber(peek(1))):
     runtimeError("Operands must be numbers.")
-    return INTERPRET_RUNTIME_ERROR
+    return InterpretRuntimeError
 
   let
     b = asNumber(pop())
@@ -297,7 +297,7 @@ proc run(): InterpretResult =
   var frame = addr vm.frames[vm.frameCount - 1]
 
   while true:
-    when defined(DEBUG_TRACE_EXECUTION):
+    when defined(debugTraceExecution):
       write(stdout, "          ")
 
       for slot in cast[ptr Value](addr vm.stack[0]) ..< vm.stackTop:
@@ -312,58 +312,58 @@ proc run(): InterpretResult =
     let instruction = readByte()
 
     case instruction
-    of uint8(OP_CONSTANT):
+    of uint8(OpConstant):
       let constant = readConstant()
       push(constant)
-    of uint8(OP_NIL):
+    of uint8(OpNil):
       push(nilVal)
-    of uint8(OP_TRUE):
+    of uint8(OpTrue):
       push(boolVal(true))
-    of uint8(OP_FALSE):
+    of uint8(OpFalse):
       push(boolVal(false))
-    of uint8(OP_POP):
+    of uint8(OpPop):
       discard pop()
-    of uint8(OP_GET_LOCAL):
+    of uint8(OpGetLocal):
       let slot = readByte()
       push(frame.slots[slot])
-    of uint8(OP_SET_LOCAL):
+    of uint8(OpSetLocal):
       let slot = readByte()
       frame.slots[slot] = peek(0)
-    of uint8(OP_GET_GLOBAL):
+    of uint8(OpGetGlobal):
       let name = readString()
 
       var value: Value
 
       if not tableGet(vm.globals, name, value):
         runtimeError("Undefined variable '$1'.", cast[cstring](name.chars))
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       push(value)
-    of uint8(OP_DEFINE_GLOBAL):
+    of uint8(OpDefineGlobal):
       let name = readString()
 
       discard tableSet(vm.globals, name, peek(0))
       discard pop()
-    of uint8(OP_SET_GLOBAL):
+    of uint8(OpSetGlobal):
       let name = readString()
 
       if tableSet(vm.globals, name, peek(0)):
         discard tableDelete(vm.globals, name)
 
         runtimeError("Undefined variable '$1'.", cast[cstring](name.chars))
-        return INTERPRET_RUNTIME_ERROR
-    of uint8(OP_GET_UPVALUE):
+        return InterpretRuntimeError
+    of uint8(OpGetUpvalue):
       let slot = readByte()
 
       push(frame.closure.upvalues[slot].location[])
-    of uint8(OP_SET_UPVALUE):
+    of uint8(OpSetUpvalue):
       let slot = readByte()
 
       frame.closure.upvalues[slot].location[] = peek(0)
-    of uint8(OP_GET_PROPERTY):
+    of uint8(OpGetProperty):
       if not isInstance(peek(0)):
         runtimeError("Only instances have properties.")
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       let
         instance = asInstance(peek(0))
@@ -376,11 +376,11 @@ proc run(): InterpretResult =
 
         push(value)
       elif not bindMethod(instance.klass, name):
-        return INTERPRET_RUNTIME_ERROR
-    of uint8(OP_SET_PROPERTY):
+        return InterpretRuntimeError
+    of uint8(OpSetProperty):
       if not isInstance(peek(1)):
         runtimeError("Only instances have fields.")
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       let instance = asInstance(peek(1))
 
@@ -391,24 +391,24 @@ proc run(): InterpretResult =
       discard pop()
 
       push(value)
-    of uint8(OP_GET_SUPER):
+    of uint8(OpGetSuper):
       let
         name = readString()
         superclass = asClass(pop())
 
       if not bindMethod(superclass, name):
-        return INTERPRET_RUNTIME_ERROR
-    of uint8(OP_EQUAL):
+        return InterpretRuntimeError
+    of uint8(OpEqual):
       let
         b = pop()
         a = pop()
 
       push(boolVal(valuesEqual(a, b)))
-    of uint8(OP_GREATER):
+    of uint8(OpGreater):
       binaryOp(boolVal, `>`)
-    of uint8(OP_LESS):
+    of uint8(OpLess):
       binaryOp(boolVal, `<`)
-    of uint8(OP_ADD):
+    of uint8(OpAdd):
       if isString(peek(0)) and isString(peek(1)):
         concatenate()
       elif isNumber(peek(0)) and isNumber(peek(1)):
@@ -419,63 +419,63 @@ proc run(): InterpretResult =
         push(numberVal(a + b))
       else:
         runtimeError("Operands must be two numbers or two strings.")
-        return INTERPRET_RUNTIME_ERROR
-    of uint8(OP_SUBTRACT):
+        return InterpretRuntimeError
+    of uint8(OpSubtract):
       binaryOp(numberVal, `-`)
-    of uint8(OP_MULTIPLY):
+    of uint8(OpMultiply):
       binaryOp(numberVal, `*`)
-    of uint8(OP_DIVIDE):
+    of uint8(OpDivide):
       binaryOp(numberVal, `/`)
-    of uint8(OP_NOT):
+    of uint8(OpNot):
       push(boolVal(isFalsey(pop())))
-    of uint8(OP_NEGATE):
+    of uint8(OpNegate):
       if not isNumber(peek(0)):
         runtimeError("Operand must be a number.")
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       push(numberVal(-asNumber(pop())))
-    of uint8(OP_PRINT):
+    of uint8(OpPrint):
       printValue(pop())
       write(stdout, '\n')
-    of uint8(OP_JUMP):
+    of uint8(OpJump):
       let offset = readShort()
 
       frame.ip += offset
-    of uint8(OP_JUMP_IF_FALSE):
+    of uint8(OpJumpIfFalse):
       let offset = readShort()
 
       if isFalsey(peek(0)):
         frame.ip += offset
-    of uint8(OP_LOOP):
+    of uint8(OpLoop):
       let offset = readShort()
       frame.ip -= offset
-    of uint8(OP_CALL):
+    of uint8(OpCall):
       let argCount = readByte().int32
 
       if not callValue(peek(argCount), argCount):
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       frame = addr vm.frames[vm.frameCount - 1]
-    of uint8(OP_INVOKE):
+    of uint8(OpInvoke):
       let
         `method` = readString()
         argCount = readByte().int32
 
       if not invoke(`method`, argCount):
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       frame = addr vm.frames[vm.frameCount - 1]
-    of uint8(OP_SUPER_INVOKE):
+    of uint8(OpSuperInvoke):
       let
         `method` = readString()
         argCount = readByte().int32
         superclass = asClass(pop())
 
       if not invokeFromClass(superclass, `method`, argCount):
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       frame = addr vm.frames[vm.frameCount - 1]
-    of uint8(OP_CLOSURE):
+    of uint8(OpClosure):
       let function = asFunction(readConstant())
 
       var closure = newClosure(function)
@@ -491,11 +491,11 @@ proc run(): InterpretResult =
           closure.upvalues[i] = captureUpvalue(frame.slots + index)
         else:
           closure.upvalues[i] = frame.closure.upvalues[index]
-    of uint8(OP_CLOSE_UPVALUE):
+    of uint8(OpCloseUpvalue):
       closeUpvalues(vm.stackTop - 1)
 
       discard pop()
-    of uint8(OP_RETURN):
+    of uint8(OpReturn):
       let res = pop()
 
       closeUpvalues(frame.slots)
@@ -504,28 +504,28 @@ proc run(): InterpretResult =
 
       if vm.frameCount == 0:
         discard pop()
-        return INTERPRET_OK
+        return InterpretOk
 
       vm.stackTop = frame.slots
 
       push(res)
 
       frame = addr vm.frames[vm.frameCount - 1]
-    of uint8(OP_CLASS):
+    of uint8(OpClass):
       push(objVal(newClass(readString())))
-    of uint8(OP_INHERIT):
+    of uint8(OpInherit):
       var superclass = peek(1)
 
       if not isClass(superclass):
         runtimeError("Superclass must be a class.")
-        return INTERPRET_RUNTIME_ERROR
+        return InterpretRuntimeError
 
       var subclass = asClass(peek(0))
 
       tableAddAll(asClass(superclass).methods, subclass.methods)
 
       discard pop()
-    of uint8(OP_METHOD):
+    of uint8(OpMethod):
       defineMethod(readString())
     else:
       discard
@@ -534,7 +534,7 @@ proc interpret*(source: var string): InterpretResult =
   let function = compile(source)
 
   if isNil(function):
-    return INTERPRET_COMPILE_ERROR
+    return InterpretCompileError
 
   push(objVal(function))
 

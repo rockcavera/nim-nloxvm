@@ -49,7 +49,7 @@ proc makeToken(`type`: TokenType): Token =
   result.line = scanner.line
 
 proc errorToken(message: string): Token =
-  result.`type` = TOKEN_ERROR
+  result.`type` = TokenError
   result.start = addr message[0]
   result.length = len(message).int32
   result.line = scanner.line
@@ -77,56 +77,56 @@ proc checkKeyword(start: int32, length: int32, rest: string, `type`: TokenType):
   if (scanner.current - scanner.start) == (start + length) and cmpMem(scanner.start + start, cstring(rest), length) == 0:
     return `type`
 
-  TOKEN_IDENTIFIER
+  TokenIdentifier
 
 proc identifierType(): TokenType =
   case scanner.start[]
   of 'a':
-    return checkKeyword(1, 2, "nd", TOKEN_AND)
+    return checkKeyword(1, 2, "nd", TokenAnd)
   of 'c':
-    return checkKeyword(1, 4, "lass", TOKEN_CLASS)
+    return checkKeyword(1, 4, "lass", TokenClass)
   of 'e':
-    return checkKeyword(1, 3, "lse", TOKEN_ELSE)
+    return checkKeyword(1, 3, "lse", TokenElse)
   of 'f':
     if scanner.current - scanner.start > 1:
       case scanner.start[1]
       of 'a':
-        return checkKeyword(2, 3, "lse", TOKEN_FALSE)
+        return checkKeyword(2, 3, "lse", TokenFalse)
       of 'o':
-        return checkKeyword(2, 1, "r", TOKEN_FOR)
+        return checkKeyword(2, 1, "r", TokenFor)
       of 'u':
-        return checkKeyword(2, 1, "n", TOKEN_FUN)
+        return checkKeyword(2, 1, "n", TokenFun)
       else:
         discard
   of 'i':
-    return checkKeyword(1, 1, "f", TOKEN_IF)
+    return checkKeyword(1, 1, "f", TokenIf)
   of 'n':
-    return checkKeyword(1, 2, "il", TOKEN_NIL)
+    return checkKeyword(1, 2, "il", TokenNil)
   of 'o':
-    return checkKeyword(1, 1, "r", TOKEN_OR)
+    return checkKeyword(1, 1, "r", TokenOr)
   of 'p':
-    return checkKeyword(1, 4, "rint", TOKEN_PRINT)
+    return checkKeyword(1, 4, "rint", TokenPrint)
   of 'r':
-    return checkKeyword(1, 5, "eturn", TOKEN_RETURN)
+    return checkKeyword(1, 5, "eturn", TokenReturn)
   of 's':
-    return checkKeyword(1, 4, "uper", TOKEN_SUPER)
+    return checkKeyword(1, 4, "uper", TokenSuper)
   of 't':
     if scanner.current - scanner.start > 1:
       case scanner.start[1]
       of 'h':
-        return checkKeyword(2, 2, "is", TOKEN_THIS)
+        return checkKeyword(2, 2, "is", TokenThis)
       of 'r':
-        return checkKeyword(2, 2, "ue", TOKEN_TRUE)
+        return checkKeyword(2, 2, "ue", TokenTrue)
       else:
         discard
   of 'v':
-    return checkKeyword(1, 2, "ar", TOKEN_VAR)
+    return checkKeyword(1, 2, "ar", TokenVar)
   of 'w':
-    return checkKeyword(1, 4, "hile", TOKEN_WHILE)
+    return checkKeyword(1, 4, "hile", TokenWhile)
   else:
     discard
 
-  TOKEN_IDENTIFIER
+  TokenIdentifier
 
 proc identifier(): Token =
   while isAlpha(peek()) or isDigit(peek()):
@@ -144,7 +144,7 @@ proc number(): Token =
     while isDigit(peek()):
       discard advance()
 
-  makeToken(TOKEN_NUMBER)
+  makeToken(TokenNumber)
 
 proc string(): Token =
   while peek() != '"' and not(isAtEnd()):
@@ -158,7 +158,7 @@ proc string(): Token =
 
   discard advance()
 
-  makeToken(TOKEN_STRING)
+  makeToken(TokenString)
 
 proc scanToken*(): Token =
   skipWhitespace()
@@ -166,7 +166,7 @@ proc scanToken*(): Token =
   scanner.start = scanner.current
 
   if isAtEnd():
-    return makeToken(TOKEN_EOF)
+    return makeToken(TokenEof)
 
   let c = advance()
 
@@ -178,35 +178,35 @@ proc scanToken*(): Token =
 
   case c
   of '(':
-    return makeToken(TOKEN_LEFT_PAREN)
+    return makeToken(TokenLeftParen)
   of ')':
-    return makeToken(TOKEN_RIGHT_PAREN)
+    return makeToken(TokenRightParen)
   of '{':
-    return makeToken(TOKEN_LEFT_BRACE)
+    return makeToken(TokenLeftBrace)
   of '}':
-    return makeToken(TOKEN_RIGHT_BRACE)
+    return makeToken(TokenRightBrace)
   of ';':
-    return makeToken(TOKEN_SEMICOLON)
+    return makeToken(TokenSemicolon)
   of ',':
-    return makeToken(TOKEN_COMMA)
+    return makeToken(TokenComma)
   of '.':
-    return makeToken(TOKEN_DOT)
+    return makeToken(TokenDot)
   of '-':
-    return makeToken(TOKEN_MINUS)
+    return makeToken(TokenMinus)
   of '+':
-    return makeToken(TOKEN_PLUS)
+    return makeToken(TokenPlus)
   of '/':
-    return makeToken(TOKEN_SLASH)
+    return makeToken(TokenSlash)
   of '*':
-    return makeToken(TOKEN_STAR)
+    return makeToken(TokenStar)
   of '!':
-    return makeToken(if match('='): TOKEN_BANG_EQUAL else: TOKEN_BANG)
+    return makeToken(if match('='): TokenBangEqual else: TokenBang)
   of '=':
-    return makeToken(if match('='): TOKEN_EQUAL_EQUAL else: TOKEN_EQUAL)
+    return makeToken(if match('='): TokenEqualEqual else: TokenEqual)
   of '<':
-    return makeToken(if match('='): TOKEN_LESS_EQUAL else: TOKEN_LESS)
+    return makeToken(if match('='): TokenLessEqual else: TokenLess)
   of '>':
-    return makeToken(if match('='): TOKEN_GREATER_EQUAL else: TOKEN_GREATER)
+    return makeToken(if match('='): TokenGreaterEqual else: TokenGreater)
   of '"':
     return string()
   else:

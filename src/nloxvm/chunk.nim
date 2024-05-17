@@ -11,8 +11,8 @@ proc initChunk*(chunk: var Chunk) =
   initValueArray(chunk.constants)
 
 proc freeChunk*(chunk: var Chunk) {.exportc: "freeChunk__nloxvmZchunk_u23".} =
-  free_array(uint8, chunk.code, chunk.capacity)
-  free_array(int32, chunk.lines, chunk.capacity)
+  freeArray(uint8, chunk.code, chunk.capacity)
+  freeArray(int32, chunk.lines, chunk.capacity)
   freeValueArray(chunk.constants)
   initChunk(chunk)
 
@@ -20,9 +20,9 @@ proc writeChunk*(chunk: var Chunk, `byte`: uint8, line: int32) =
   if chunk.capacity < (chunk.count + 1):
     let oldCapacity = chunk.capacity
 
-    chunk.capacity = grow_capacity(oldCapacity)
-    chunk.code = grow_array(uint8, chunk.code, oldCapacity, chunk.capacity)
-    chunk.lines = grow_array(int32, chunk.lines, oldCapacity, chunk.capacity)
+    chunk.capacity = growCapacity(oldCapacity)
+    chunk.code = growArray(uint8, chunk.code, oldCapacity, chunk.capacity)
+    chunk.lines = growArray(int32, chunk.lines, oldCapacity, chunk.capacity)
 
   chunk.code[chunk.count] = `byte`
   chunk.lines[chunk.count] = line

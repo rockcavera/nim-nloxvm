@@ -11,18 +11,18 @@ proc writeValueArray*(`array`: var ValueArray, value: Value) =
   if `array`.capacity < (`array`.count + 1):
     let oldCapacity = `array`.capacity
 
-    `array`.capacity = grow_capacity(oldCapacity)
-    `array`.values = grow_array(Value, `array`.values, oldCapacity, `array`.capacity)
+    `array`.capacity = growCapacity(oldCapacity)
+    `array`.values = growArray(Value, `array`.values, oldCapacity, `array`.capacity)
 
   `array`.values[`array`.count] = value
   `array`.count += 1
 
 proc freeValueArray*(`array`: var ValueArray) =
-  free_array(Value, `array`.values, `array`.capacity)
+  freeArray(Value, `array`.values, `array`.capacity)
   initValueArray(`array`)
 
 proc valuesEqual*(a: Value, b: Value): bool =
-  when NAN_BOXING:
+  when nanBoxing:
     if isNumber(a) and isNumber(b):
       return asNumber(a) == asNumber(b)
 
@@ -32,11 +32,11 @@ proc valuesEqual*(a: Value, b: Value): bool =
       return false
 
     case a.`type`
-    of VAL_BOOL:
+    of ValBool:
       return asBool(a) == asBool(b)
-    of VAL_NIL:
+    of ValNil:
       return true
-    of VAL_NUMBER:
+    of ValNumber:
       return asNumber(a) == asNumber(b)
-    of VAL_OBJ:
+    of ValObj:
       asObj(a) == asObj(b)

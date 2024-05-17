@@ -72,76 +72,76 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
   let instruction = chunk.code[offset]
 
   case instruction
-  of uint8(OP_CONSTANT):
-    return constantInstruction("OP_CONSTANT", chunk, offset)
-  of uint8(OP_NIL):
-    return simpleInstruction("OP_NIL", offset)
-  of uint8(OP_TRUE):
-    return simpleInstruction("OP_TRUE", offset)
-  of uint8(OP_FALSE):
-    return simpleInstruction("OP_FALSE", offset)
-  of uint8(OP_POP):
-    return simpleInstruction("OP_POP", offset)
-  of uint8(OP_GET_LOCAL):
-    return byteInstruction("OP_GET_LOCAL", chunk, offset)
-  of uint8(OP_SET_LOCAL):
-    return byteInstruction("OP_SET_LOCAL", chunk, offset)
-  of uint8(OP_GET_GLOBAL):
-    return constantInstruction("OP_GET_GLOBAL", chunk, offset)
-  of uint8(OP_DEFINE_GLOBAL):
-    return constantInstruction("OP_DEFINE_GLOBAL", chunk, offset)
-  of uint8(OP_SET_GLOBAL):
-    return constantInstruction("OP_SET_GLOBAL", chunk, offset)
-  of uint8(OP_GET_UPVALUE):
-    return byteInstruction("OP_GET_UPVALUE", chunk, offset)
-  of uint8(OP_SET_UPVALUE):
-    return byteInstruction("OP_SET_UPVALUE", chunk, offset)
-  of uint8(OP_GET_PROPERTY):
-    return constantInstruction("OP_GET_PROPERTY", chunk, offset)
-  of uint8(OP_SET_PROPERTY):
-    return constantInstruction("OP_SET_PROPERTY", chunk, offset)
-  of uint8(OP_GET_SUPER):
-    return constantInstruction("OP_GET_SUPER", chunk, offset)
-  of uint8(OP_EQUAL):
-    return simpleInstruction("OP_EQUAL", offset)
-  of uint8(OP_GREATER):
-    return simpleInstruction("OP_GREATER", offset)
-  of uint8(OP_LESS):
-    return simpleInstruction("OP_LESS", offset)
-  of uint8(OP_ADD):
-    return simpleInstruction("OP_ADD", offset)
-  of uint8(OP_SUBTRACT):
-    return simpleInstruction("OP_SUBTRACT", offset)
-  of uint8(OP_MULTIPLY):
-    return simpleInstruction("OP_MULTIPLY", offset)
-  of uint8(OP_DIVIDE):
-    return simpleInstruction("OP_DIVIDE", offset)
-  of uint8(OP_NOT):
-    return simpleInstruction("OP_NOT", offset)
-  of uint8(OP_NEGATE):
-    return simpleInstruction("OP_NEGATE", offset)
-  of uint8(OP_PRINT):
-    return simpleInstruction("OP_PRINT", offset)
-  of uint8(OP_JUMP):
-    return jumpInstruction("OP_JUMP", 1, chunk, offset)
-  of uint8(OP_JUMP_IF_FALSE):
-    return jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset)
-  of uint8(OP_LOOP):
-    return jumpInstruction("OP_LOOP", -1, chunk, offset)
-  of uint8(OP_CALL):
-    return byteInstruction("OP_CALL", chunk, offset)
-  of uint8(OP_INVOKE):
-    return invokeInstruction("OP_INVOKE", chunk, offset)
-  of uint8(OP_SUPER_INVOKE):
-    return invokeInstruction("OP_SUPER_INVOKE", chunk, offset)
-  of uint8(OP_CLOSURE):
+  of uint8(OpConstant):
+    return constantInstruction("OpConstant", chunk, offset)
+  of uint8(OpNil):
+    return simpleInstruction("OpNil", offset)
+  of uint8(OpTrue):
+    return simpleInstruction("OpTrue", offset)
+  of uint8(OpFalse):
+    return simpleInstruction("OpFalse", offset)
+  of uint8(OpPop):
+    return simpleInstruction("OpPop", offset)
+  of uint8(OpGetLocal):
+    return byteInstruction("OpGetLocal", chunk, offset)
+  of uint8(OpSetLocal):
+    return byteInstruction("OpSetLocal", chunk, offset)
+  of uint8(OpGetGlobal):
+    return constantInstruction("OpGetGlobal", chunk, offset)
+  of uint8(OpDefineGlobal):
+    return constantInstruction("OpDefineGlobal", chunk, offset)
+  of uint8(OpSetGlobal):
+    return constantInstruction("OpSetGlobal", chunk, offset)
+  of uint8(OpGetUpvalue):
+    return byteInstruction("OpGetUpvalue", chunk, offset)
+  of uint8(OpSetUpvalue):
+    return byteInstruction("OpSetUpvalue", chunk, offset)
+  of uint8(OpGetProperty):
+    return constantInstruction("OpGetProperty", chunk, offset)
+  of uint8(OpSetProperty):
+    return constantInstruction("OpSetProperty", chunk, offset)
+  of uint8(OpGetSuper):
+    return constantInstruction("OpGetSuper", chunk, offset)
+  of uint8(OpEqual):
+    return simpleInstruction("OpEqual", offset)
+  of uint8(OpGreater):
+    return simpleInstruction("OpGreater", offset)
+  of uint8(OpLess):
+    return simpleInstruction("OpLess", offset)
+  of uint8(OpAdd):
+    return simpleInstruction("OpAdd", offset)
+  of uint8(OpSubtract):
+    return simpleInstruction("OpSubtract", offset)
+  of uint8(OpMultiply):
+    return simpleInstruction("OpMultiply", offset)
+  of uint8(OpDivide):
+    return simpleInstruction("OpDivide", offset)
+  of uint8(OpNot):
+    return simpleInstruction("OpNot", offset)
+  of uint8(OpNegate):
+    return simpleInstruction("OpNegate", offset)
+  of uint8(OpPrint):
+    return simpleInstruction("OpPrint", offset)
+  of uint8(OpJump):
+    return jumpInstruction("OpJump", 1, chunk, offset)
+  of uint8(OpJumpIfFalse):
+    return jumpInstruction("OpJumpIfFalse", 1, chunk, offset)
+  of uint8(OpLoop):
+    return jumpInstruction("OpLoop", -1, chunk, offset)
+  of uint8(OpCall):
+    return byteInstruction("OpCall", chunk, offset)
+  of uint8(OpInvoke):
+    return invokeInstruction("OpInvoke", chunk, offset)
+  of uint8(OpSuperInvoke):
+    return invokeInstruction("OpSuperInvoke", chunk, offset)
+  of uint8(OpClosure):
     var offset = offset + 1
 
     let constant = chunk.code[offset]
 
     inc(offset)
 
-    write(stdout, fmt"""{"OP_CLOSURE": <16} {constant: >4} """)
+    write(stdout, fmt"""{"OpClosure": <16} {constant: >4} """)
 
     printValue(chunk.constants.values[constant])
 
@@ -162,16 +162,16 @@ proc disassembleInstruction*(chunk: var Chunk, offset: int32): int32 =
 
       write(stdout, fmt"{offset - 2:04}      |                     {isLocalStr} {index}{'\n'}")
     return offset
-  of uint8(OP_CLOSE_UPVALUE):
-    return simpleInstruction("OP_CLOSE_UPVALUE", offset)
-  of uint8(OP_RETURN):
-    return simpleInstruction("OP_RETURN", offset)
-  of uint8(OP_CLASS):
-    return constantInstruction("OP_CLASS", chunk, offset)
-  of uint8(OP_INHERIT):
-    return simpleInstruction("OP_INHERIT", offset)
-  of uint8(OP_METHOD):
-    return constantInstruction("OP_METHOD", chunk, offset)
+  of uint8(OpCloseUpvalue):
+    return simpleInstruction("OpCloseUpvalue", offset)
+  of uint8(OpReturn):
+    return simpleInstruction("OpReturn", offset)
+  of uint8(OpClass):
+    return constantInstruction("OpClass", chunk, offset)
+  of uint8(OpInherit):
+    return simpleInstruction("OpInherit", offset)
+  of uint8(OpMethod):
+    return constantInstruction("OpMethod", chunk, offset)
   else:
     write(stdout, fmt"Unknown opcode {instruction}{'\n'}")
     return offset + 1

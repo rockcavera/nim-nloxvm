@@ -17,29 +17,29 @@ proc printFunction(function: ptr ObjFunction) =
 
 proc printObject(value: Value) =
   case objType(value)
-  of OBJT_BOUND_METHOD:
+  of ObjtBoundMethod:
     printFunction(asBoundMethod(value).`method`.function)
-  of OBJT_CLASS:
+  of ObjtClass:
     let klass = asClass(value)
 
     discard writeBuffer(stdout, klass.name.chars, klass.name.length)
-  of OBJT_CLOSURE:
+  of ObjtClosure:
     printFunction(asClosure(value).function)
-  of OBJT_FUNCTION:
+  of ObjtFunction:
     printFunction(asFunction(value))
-  of OBJT_INSTANCE:
+  of ObjtInstance:
     let instance = asInstance(value)
 
     discard writeBuffer(stdout, instance.klass.name.chars, instance.klass.name.length)
 
     write(stdout, " instance")
-  of OBJT_NATIVE:
+  of ObjtNative:
     write(stdout, "<native fn>")
-  of OBJT_STRING:
+  of ObjtString:
     let string = asString(value)
 
     discard writeBuffer(stdout, string.chars, string.length)
-  of OBJT_UPVALUE:
+  of ObjtUpvalue:
     write(stdout, "upvalue")
 
 # end
@@ -47,7 +47,7 @@ proc printObject(value: Value) =
 # value.nim
 
 proc printValue*(value: Value) =
-  when NAN_BOXING:
+  when nanBoxing:
     if isBool(value):
       write(stdout, $asBool(value))
     elif isNil(value):
@@ -58,13 +58,13 @@ proc printValue*(value: Value) =
       printObject(value)
   else:
     case value.`type`
-    of VAL_BOOL:
+    of ValBool:
       write(stdout, $asBool(value))
-    of VAL_NIL:
+    of ValNil:
       write(stdout, "nil")
-    of VAL_NUMBER:
+    of ValNumber:
       write(stdout, fmt"{asNumber(value):g}")
-    of VAL_OBJ:
+    of ValObj:
       printObject(value)
 
 # end

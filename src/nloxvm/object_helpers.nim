@@ -6,25 +6,25 @@ template objType*(value: Value): ObjType =
   asObj(value).`type`
 
 template isBoundMethod*(value: Value): bool =
-  isObjType(value, OBJT_BOUND_METHOD)
+  isObjType(value, ObjtBoundMethod)
 
 template isClass*(value: Value): bool =
-  isObjType(value, OBJT_CLASS)
+  isObjType(value, ObjtClass)
 
 template isClosure*(value: Value): bool =
-  isObjType(value, OBJT_CLOSURE)
+  isObjType(value, ObjtClosure)
 
 template isFunction*(value: Value): bool =
-  isObjType(value, OBJT_FUNCTION)
+  isObjType(value, ObjtFunction)
 
 template isInstance*(value: Value): bool =
-  isObjType(value, OBJT_INSTANCE)
+  isObjType(value, ObjtInstance)
 
 template isNative*(value: Value): bool =
-  isObjType(value, OBJT_NATIVE)
+  isObjType(value, ObjtNative)
 
 template isString*(value: Value): bool =
-  isObjType(value, OBJT_STRING)
+  isObjType(value, ObjtString)
 
 template asBoundMethod*(value: Value): ptr ObjBoundMethod =
   cast[ptr ObjBoundMethod](asObj(value))

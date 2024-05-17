@@ -1,11 +1,11 @@
-when defined(DEBUG_LOG_GC):
+when defined(debugLogGc):
   import std/strformat
 
 import ./chunk, ./globals, ./memory, ./table, ./types, ./value_helpers
 
 import ./private/pointer_arithmetics
 
-template allocate_obj[T](`type`: typedesc[T], objectType: ObjType): ptr T =
+template allocateObj[T](`type`: typedesc[T], objectType: ObjType): ptr T =
   cast[ptr T](allocateObject(sizeof(`type`), objectType))
 
 proc allocateObject(size: int, `type`: ObjType): ptr Obj =
@@ -15,16 +15,16 @@ proc allocateObject(size: int, `type`: ObjType): ptr Obj =
   result.next = vm.objects
   vm.objects = result
 
-  when defined(DEBUG_LOG_GC):
+  when defined(debugLogGc):
     write(stdout, fmt"{cast[uint](result)} allocate {size} for {ord(`type`)}{'\n'}")
 
 proc newBoundMethod*(receiver: Value, `method`: ptr ObjClosure): ptr ObjBoundMethod =
-  result = allocate_obj(ObjBoundMethod, OBJT_BOUND_METHOD)
+  result = allocateObj(ObjBoundMethod, ObjtBoundMethod)
   result.receiver = receiver
   result.`method` = `method`
 
 proc newClass*(name: ptr ObjString): ptr ObjClass =
-  result = allocate_obj(ObjClass, OBJT_CLASS)
+  result = allocateObj(ObjClass, ObjtClass)
   result.name = name
 
   initTable(result.methods)
@@ -35,13 +35,13 @@ proc newClosure*(function: ptr ObjFunction): ptr ObjClosure =
   for i in 0 ..< function.upvalueCount:
     upvalues[i] = nil
 
-  result = allocate_obj(ObjClosure, OBJT_CLOSURE)
+  result = allocateObj(ObjClosure, ObjtClosure)
   result.function = function
   result.upvalues = upvalues
   result.upvalueCount = function.upvalueCount
 
 proc newFunction*(): ptr ObjFunction =
-  result = allocate_obj(ObjFunction, OBJT_FUNCTION)
+  result = allocateObj(ObjFunction, ObjtFunction)
   result.arity = 0
   result.upvalueCount = 0
   result.name = nil
@@ -49,20 +49,20 @@ proc newFunction*(): ptr ObjFunction =
   initChunk(result.chunk)
 
 proc newInstance*(klass: ptr ObjClass): ptr ObjInstance =
-  result = allocate_obj(ObjInstance, OBJT_INSTANCE)
+  result = allocateObj(ObjInstance, ObjtInstance)
   result.klass = klass
 
   initTable(result.fields)
 
 proc newNative*(function: NativeFn): ptr ObjNative =
-  result = allocate_obj(ObjNative, OBJT_NATIVE)
+  result = allocateObj(ObjNative, ObjtNative)
   result.function = function
 
 proc push(value: Value) {.importc: "push__nloxvmZvm95impl_u4".}
 proc pop(): Value {.importc: "pop__nloxvmZvm95impl_u15".}
 
 proc allocateString(chars: ptr char, length: int32, hash: uint32): ptr ObjString =
-  result = allocate_obj(ObjString, OBJT_STRING)
+  result = allocateObj(ObjString, ObjtString)
   result.length = length
   result.chars = chars
   result.hash = hash
@@ -86,7 +86,7 @@ proc takeString*(chars: ptr char, length: int32): ptr ObjString =
     interned = tableFindString(vm.strings, chars, length, hash)
 
   if not isNil(interned):
-    free_array(char, chars, length + 1)
+    freeArray(char, chars, length + 1)
     return interned
 
   allocateString(chars, length, hash)
@@ -108,7 +108,7 @@ proc copyString*(chars: ptr char, length: int32): ptr ObjString =
   allocateString(heapChars, length, hash)
 
 proc newUpvalue*(slot: ptr Value): ptr ObjUpvalue =
-  result = allocate_obj(ObjUpvalue, OBJT_UPVALUE)
+  result = allocateObj(ObjUpvalue, ObjtUpvalue)
   result.location = slot
   result.closed = nilVal
   result.next = nil
