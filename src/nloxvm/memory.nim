@@ -11,34 +11,34 @@ import ./private/pointer_arithmetics
 
 const gcHeapGrowFactor {.intdefine.} = 2
 
-proc freeChunk(chunk: var Chunk) {.importc: "freeChunk__nloxvmZchunk_u23".}
-proc collectGarbage*()
+proc freeChunk(vm: var VM, chunk: var Chunk) {.importc: "freeChunk__nloxvmZchunk_u23".}
+proc collectGarbage*(vm: var VM)
 
-template allocate*[T](`type`: typedesc[T], count: untyped): ptr T =
-  cast[ptr T](reallocate(nil, 0, sizeof(`type`) * count))
+template allocate*[T](vm: var VM, `type`: typedesc[T], count: untyped): ptr T =
+  cast[ptr T](reallocate(vm, nil, 0, sizeof(`type`) * count))
 
-template free*[T](`type`: typedesc, `pointer`: T) =
-  discard reallocate(`pointer`, sizeof(`type`), 0)
+template free*[T](vm: var VM, `type`: typedesc, `pointer`: T) =
+  discard reallocate(vm, `pointer`, sizeof(`type`), 0)
 
 template growCapacity*[T](capacity: T): T =
   if capacity < 8: 8
   else: capacity * 2
 
-template growArray*[T](`type`: typedesc, `pointer`: T, oldCount, newCount: untyped): T =
-  cast[T](reallocate(`pointer`, sizeof(`type`) * oldCount, sizeof(`type`) * newCount))
+template growArray*[T](vm: var VM, `type`: typedesc, `pointer`: T, oldCount, newCount: untyped): T =
+  cast[T](reallocate(vm, `pointer`, sizeof(`type`) * oldCount, sizeof(`type`) * newCount))
 
-template freeArray*[T](`type`: typedesc, `pointer`: T, oldCount: untyped) =
-  discard reallocate(`pointer`, sizeof(`type`) * oldCount, 0)
+template freeArray*[T](vm: var VM, `type`: typedesc, `pointer`: T, oldCount: untyped) =
+  discard reallocate(vm, `pointer`, sizeof(`type`) * oldCount, 0)
 
-proc reallocate*(`pointer`: pointer, oldSize: int, newSize: int): pointer =
+proc reallocate*(vm: var VM, `pointer`: pointer, oldSize: int, newSize: int): pointer =
   vm.bytesAllocated += newSize - oldSize
 
   if newSize > oldSize:
     when defined(debugStressGc):
-      collectGarbage()
+      collectGarbage(vm)
 
     if vm.bytesAllocated > vm.nextGC:
-      collectGarbage()
+      collectGarbage(vm)
 
   if newSize == 0:
     c_free(`pointer`)
@@ -49,7 +49,7 @@ proc reallocate*(`pointer`: pointer, oldSize: int, newSize: int): pointer =
   if isNil(result):
     quit(1)
 
-proc markObject*(`object`: ptr Obj) =
+proc markObject*(vm: var VM, `object`: ptr Obj) =
   if isNil(`object`):
     return
 
@@ -76,26 +76,26 @@ proc markObject*(`object`: ptr Obj) =
 
   inc(vm.grayCount)
 
-proc markValue*(value: Value) =
+proc markValue*(vm: var VM, value: Value) =
   if isObj(value):
-    markObject(asObj(value))
+    markObject(vm, asObj(value))
 
-proc markArray(`array`: var ValueArray) =
+proc markArray(vm: var VM, `array`: var ValueArray) =
   for i in 0 ..< `array`.count:
-    markValue(`array`.values[i])
+    markValue(vm, `array`.values[i])
 
 # table.nim
 
-proc markTable(table: var Table) =
+proc markTable(vm: var VM, table: var Table) =
   for i in 0 ..< table.capacity:
     let entry = addr table.entries[i]
 
-    markObject(cast[ptr Obj](entry.key))
-    markValue(entry.value)
+    markObject(vm, cast[ptr Obj](entry.key))
+    markValue(vm, entry.value)
 
 # end
 
-proc blackenObject(`object`: ptr Obj) =
+proc blackenObject(vm: var VM, `object`: ptr Obj) =
   when defined(debugLogGc):
     write(stdout, fmt"{cast[uint](`object`)} blacken ")
 
@@ -107,124 +107,124 @@ proc blackenObject(`object`: ptr Obj) =
   of ObjtBoundMethod:
     let bound = cast[ptr ObjBoundMethod](`object`)
 
-    markValue(bound.receiver)
+    markValue(vm, bound.receiver)
 
-    markObject(cast[ptr Obj](bound.`method`))
+    markObject(vm, cast[ptr Obj](bound.`method`))
   of ObjtClass:
     let klass = cast[ptr ObjClass](`object`)
 
-    markObject(cast[ptr Obj](klass.name))
+    markObject(vm, cast[ptr Obj](klass.name))
 
-    markTable(klass.methods)
+    markTable(vm, klass.methods)
   of ObjtClosure:
     let closure = cast[ptr ObjClosure](`object`)
 
-    markObject(cast[ptr Obj](closure.function))
+    markObject(vm, cast[ptr Obj](closure.function))
 
     for i in 0 ..< closure.upvalueCount:
-      markObject(cast[ptr Obj](closure.upvalues[i]))
+      markObject(vm, cast[ptr Obj](closure.upvalues[i]))
   of ObjtFunction:
     let function = cast[ptr ObjFunction](`object`)
 
-    markObject(cast[ptr Obj](function.name))
+    markObject(vm, cast[ptr Obj](function.name))
 
-    markArray(function.chunk.constants)
+    markArray(vm, function.chunk.constants)
   of ObjtInstance:
     let instance = cast[ptr ObjInstance](`object`)
 
-    markObject(cast[ptr Obj](instance.klass))
+    markObject(vm, cast[ptr Obj](instance.klass))
 
-    markTable(instance.fields)
+    markTable(vm, instance.fields)
   of ObjtUpvalue:
-    markValue(cast[ptr ObjUpvalue](`object`).closed)
+    markValue(vm, cast[ptr ObjUpvalue](`object`).closed)
   of ObjtNative, ObjtString:
     discard
 
 from ./table import freeTable, tableRemoveWhite
 
-proc freeObject*(`object`: ptr Obj) =
+proc freeObject*(vm: var VM, `object`: ptr Obj) =
   when defined(debugLogGc):
     write(stdout, fmt"{cast[uint](`object`)} free type {ord(`object`.`type`)}{'\n'}")
 
   case `object`.`type`
   of ObjtBoundMethod:
-    free(ObjBoundMethod, `object`)
+    free(vm, ObjBoundMethod, `object`)
   of ObjtClass:
     let klass = cast[ptr ObjClass](`object`)
 
-    freeTable(klass.methods)
+    freeTable(vm, klass.methods)
 
-    free(ObjClass, `object`)
+    free(vm, ObjClass, `object`)
   of ObjtClosure:
     let closure = cast[ptr ObjClosure](`object`)
 
-    freeArray(ptr ObjUpvalue, closure.upvalues, closure.upvalueCount)
+    freeArray(vm, ptr ObjUpvalue, closure.upvalues, closure.upvalueCount)
 
-    free(ObjClosure, `object`)
+    free(vm, ObjClosure, `object`)
   of ObjtFunction:
     let function = cast[ptr ObjFunction](`object`)
 
-    freeChunk(function.chunk)
+    freeChunk(vm, function.chunk)
 
-    free(ObjFunction, `object`)
+    free(vm, ObjFunction, `object`)
   of ObjtInstance:
     let instance = cast[ptr ObjInstance](`object`)
 
-    freeTable(instance.fields)
+    freeTable(vm, instance.fields)
 
-    free(ObjInstance, `object`)
+    free(vm, ObjInstance, `object`)
   of ObjtNative:
-    free(ObjNative, `object`)
+    free(vm, ObjNative, `object`)
   of ObjtString:
     let string = cast[ptr ObjString](`object`)
 
-    freeArray(char, string.chars, string.length + 1)
+    freeArray(vm, char, string.chars, string.length + 1)
 
-    free(ObjString, `object`)
+    free(vm, ObjString, `object`)
   of ObjtUpvalue:
-    free(ObjUpvalue, `object`)
+    free(vm, ObjUpvalue, `object`)
 
 # compiler.nim
 
-proc markCompilerRoots() =
+proc markCompilerRoots(vm: var VM) =
   var compiler = current
 
   while not isNil(compiler):
-    markObject(cast[ptr Obj](compiler.function))
+    markObject(vm, cast[ptr Obj](compiler.function))
 
     compiler = compiler.enclosing
 
 # end
 
-proc markRoots() =
+proc markRoots(vm: var VM) =
   for slot in cast[ptr Value](addr vm.stack) ..< vm.stackTop:
-    markValue(slot[])
+    markValue(vm, slot[])
 
   for i in 0 ..< vm.frameCount:
-    markObject(cast[ptr Obj](vm.frames[i].closure))
+    markObject(vm, cast[ptr Obj](vm.frames[i].closure))
 
   var upvalue = vm.openUpvalues
 
   while not isNil(upvalue):
-    markObject(cast[ptr Obj](upvalue))
+    markObject(vm, cast[ptr Obj](upvalue))
 
     upvalue = upvalue.next
 
-  markTable(vm.globals)
+  markTable(vm, vm.globals)
 
-  markCompilerRoots()
+  markCompilerRoots(vm)
 
-  markObject(cast[ptr Obj](vm.initString))
+  markObject(vm, cast[ptr Obj](vm.initString))
 
-proc traceReferences() =
+proc traceReferences(vm: var VM) =
   while vm.grayCount > 0:
     dec(vm.grayCount)
 
     let `object` = vm.grayStack[vm.grayCount]
 
-    blackenObject(`object`)
+    blackenObject(vm, `object`)
 
-proc sweep() =
+proc sweep(vm: var VM) =
   var
     previous: ptr Obj = nil
     `object` = vm.objects
@@ -244,21 +244,21 @@ proc sweep() =
       else:
         vm.objects = `object`
 
-      freeObject(unreached)
+      freeObject(vm, unreached)
 
-proc collectGarbage*() =
+proc collectGarbage*(vm: var VM) =
   when defined(debugLogGc):
     write(stdout, "-- gc begin\n")
 
     let before = vm.bytesAllocated
 
-  markRoots()
+  markRoots(vm)
 
-  traceReferences()
+  traceReferences(vm)
 
   tableRemoveWhite(vm.strings)
 
-  sweep()
+  sweep(vm)
 
   vm.nextGC = vm.bytesAllocated * gcHeapGrowFactor
 
@@ -266,13 +266,13 @@ proc collectGarbage*() =
     write(stdout, "-- gc end\n")
     write(stdout, fmt"   collected {before - vm.bytesAllocated} bytes (from {before} to {vm.bytesAllocated}) next at {vm.nextGC}{'\n'}")
 
-proc freeObjects*() =
+proc freeObjects*(vm: var VM) =
   var `object` = vm.objects
 
   while `object` != nil:
     let next = `object`.next
 
-    freeObject(`object`)
+    freeObject(vm, `object`)
 
     `object` = next
 

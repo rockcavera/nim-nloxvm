@@ -7,18 +7,18 @@ proc initValueArray*(`array`: var ValueArray) =
   `array`.capacity = 0
   `array`.count = 0
 
-proc writeValueArray*(`array`: var ValueArray, value: Value) =
+proc writeValueArray*(vm: var VM, `array`: var ValueArray, value: Value) =
   if `array`.capacity < (`array`.count + 1):
     let oldCapacity = `array`.capacity
 
     `array`.capacity = growCapacity(oldCapacity)
-    `array`.values = growArray(Value, `array`.values, oldCapacity, `array`.capacity)
+    `array`.values = growArray(vm, Value, `array`.values, oldCapacity, `array`.capacity)
 
   `array`.values[`array`.count] = value
   `array`.count += 1
 
-proc freeValueArray*(`array`: var ValueArray) =
-  freeArray(Value, `array`.values, `array`.capacity)
+proc freeValueArray*(vm: var VM, `array`: var ValueArray) =
+  freeArray(vm, Value, `array`.values, `array`.capacity)
   initValueArray(`array`)
 
 proc valuesEqual*(a: Value, b: Value): bool =

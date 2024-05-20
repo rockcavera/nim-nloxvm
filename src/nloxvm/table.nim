@@ -9,8 +9,8 @@ proc initTable*(table: var Table) =
   table.capacity = 0
   table.entries = nil
 
-proc freeTable*(table: var Table) =
-  freeArray(Entry, table.entries, table.capacity)
+proc freeTable*(vm: var VM, table: var Table) =
+  freeArray(vm, Entry, table.entries, table.capacity)
   initTable(table)
 
 proc findEntry(entries: ptr Entry, capacity: int32, key: ptr ObjString): ptr Entry =
@@ -45,8 +45,8 @@ proc tableGet*(table: var Table, key: ptr ObjString, value: var Value): bool =
 
   true
 
-proc adjustCapacity(table: var Table, capacity: int32) =
-  let entries = allocate(Entry, capacity)
+proc adjustCapacity(vm: var VM, table: var Table, capacity: int32) =
+  let entries = allocate(vm, Entry, capacity)
 
   for i in 0 ..< capacity:
     entries[i].key = nil
@@ -67,16 +67,16 @@ proc adjustCapacity(table: var Table, capacity: int32) =
 
     inc(table.count)
 
-  freeArray(Entry, table.entries, table.capacity)
+  freeArray(vm, Entry, table.entries, table.capacity)
 
   table.entries = entries
   table.capacity = capacity
 
-proc tableSet*(table: var Table, key: ptr ObjString, value: Value): bool =
+proc tableSet*(vm: var VM, table: var Table, key: ptr ObjString, value: Value): bool =
   if float32(table.count + 1) > (float32(table.capacity) * tableMaxLoad):
     let capacity = growCapacity(table.capacity)
 
-    adjustCapacity(table, capacity)
+    adjustCapacity(vm, table, capacity)
 
   var entry = findEntry(table.entries, table.capacity, key)
 
@@ -102,12 +102,12 @@ proc tableDelete*(table: var Table, key: ptr ObjString): bool =
 
   true
 
-proc tableAddAll*(`from`: var Table, to: var Table) =
+proc tableAddAll*(vm: var VM, `from`: var Table, to: var Table) =
   for i in 0 ..< `from`.capacity:
     let entry = `from`.entries + i
 
     if not isNil(entry.key):
-      discard tableSet(to, entry.key, entry.value)
+      discard tableSet(vm, to, entry.key, entry.value)
 
 proc tableFindString*(table: var Table, chars: ptr char, length: int32, hash: uint32): ptr ObjString =
   if table.count == 0:

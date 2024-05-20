@@ -4,7 +4,7 @@ import ./vm_impl, ./types
 
 proc c_fgets(str: cstring, num: cint, stream: File): cstring {.importc: "fgets", header: "<stdio.h>".}
 
-proc repl() =
+proc repl(vm: var VM) =
   var line = newString(1024)
 
   while true:
@@ -14,9 +14,9 @@ proc repl() =
       write(stdout, '\n')
       break
 
-    discard interpret(line)
+    discard interpret(vm, line)
 
-proc runFile(path: string) =
+proc runFile(vm: var VM, path: string) =
   var source: string
 
   try:
@@ -30,7 +30,7 @@ proc runFile(path: string) =
   if len(source) == 0:
     source = "\0"
 
-  let result = interpret(source)
+  let result = interpret(vm, source)
 
   case result
   of InterpretCompileError:
@@ -41,14 +41,14 @@ proc runFile(path: string) =
     discard
 
 proc main*() =
-  initVM()
+  var vm = initVM()
 
   if paramCount() == 0:
-    repl()
+    repl(vm)
   elif paramCount() == 1:
-    runFile(paramStr(1))
+    runFile(vm, paramStr(1))
   else:
     write(stderr, "Usage: nloxvm [path]\n")
     setProgramResult(64)
 
-  freeVM()
+  freeVM(vm)
