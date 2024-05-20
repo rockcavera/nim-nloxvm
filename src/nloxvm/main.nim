@@ -24,18 +24,21 @@ proc runFile(path: string) =
   except IOError:
     write(stderr, "Could not open file \"", path, "\".\n")
 
-    quit(74)
+    setProgramResult(74)
+    return
 
   if len(source) == 0:
     source = "\0"
 
   let result = interpret(source)
 
-  if result == InterpretCompileError:
-    quit(65)
-
-  if result == InterpretRuntimeError:
-    quit(70)
+  case result
+  of InterpretCompileError:
+    setProgramResult(65)
+  of InterpretRuntimeError:
+    setProgramResult(70)
+  else:
+    discard
 
 proc main*() =
   initVM()
@@ -46,8 +49,6 @@ proc main*() =
     runFile(paramStr(1))
   else:
     write(stderr, "Usage: nloxvm [path]\n")
-    quit(64)
+    setProgramResult(64)
 
   freeVM()
-
-  setProgramResult(0)
