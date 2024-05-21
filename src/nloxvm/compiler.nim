@@ -186,7 +186,7 @@ proc endCompiler(vm: var VM): ptr ObjFunction =
 
   when defined(debugPrintCode):
     if not parser.hadError:
-      disassembleChunk(currentChunk(),
+      disassembleChunk(currentChunk(vm),
                        if not isNil(result.name): result.name.chars
                        else: cast[ptr char](cstring"<script>"))
 
