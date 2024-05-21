@@ -110,6 +110,7 @@ type
     current*: Token
     previous*: Token
     rules*: array[40, ParseRule]
+    currentClass*: ptr ClassCompiler
     hadError*: bool
     panicMode*: bool
 

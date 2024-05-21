@@ -9,8 +9,6 @@ import ./private/pointer_arithmetics
 
 const uint16Max = high(uint16).int32
 
-var currentClass: ptr ClassCompiler = nil
-
 template lexeme(token: Token): openArray[char] =
   toOpenArray(cast[cstring](token.start), 0, token.length - 1)
 
@@ -475,9 +473,9 @@ proc syntheticToken(text: cstring): Token =
   result.length = len(text).int32
 
 proc super(vm: var VM, parser: var Parser, canAssign: bool) =
-  if isNil(currentClass):
+  if isNil(parser.currentClass):
     error(parser, "Can't use 'super' outside of a class.")
-  elif not currentClass.hasSuperclass:
+  elif not parser.currentClass.hasSuperclass:
     error(parser, "Can't use 'super' in a class with no superclass.")
 
   consume(parser, TokenDot, "Expect '.' after 'super'.")
@@ -499,7 +497,7 @@ proc super(vm: var VM, parser: var Parser, canAssign: bool) =
     emitBytes(vm, parser, OpGetSuper, name)
 
 proc this(vm: var VM, parser: var Parser, canAssign: bool) =
-  if isNil(currentClass):
+  if isNil(parser.currentClass):
     error(parser, "Can't use 'this' outside of a class.")
     return
 
@@ -661,8 +659,8 @@ proc classDeclaration(vm: var VM, parser: var Parser) =
   var classCompiler: ClassCompiler
 
   classCompiler.hasSuperclass = false
-  classCompiler.enclosing = currentClass
-  currentClass = addr classCompiler
+  classCompiler.enclosing = parser.currentClass
+  parser.currentClass = addr classCompiler
 
   if match(parser, TokenLess):
     consume(parser, TokenIdentifier, "Expect superclass name.")
@@ -698,7 +696,7 @@ proc classDeclaration(vm: var VM, parser: var Parser) =
   if classCompiler.hasSuperclass:
     endScope(vm, parser)
 
-  currentClass = currentClass.enclosing
+  parser.currentClass = parser.currentClass.enclosing
 
 proc funDeclaration(vm: var VM, parser: var Parser) =
   let global = parseVariable(vm, parser, "Expect function name.")
@@ -907,6 +905,7 @@ proc compile*(vm: var VM, source: var string): ptr ObjFunction =
   initCompiler(vm, compiler, parser, TypeScript)
 
   parser.rules = initRules()
+  parser.currentClass = nil
   parser.hadError = false
   parser.panicMode = false
 
