@@ -207,7 +207,7 @@ proc endScope(vm: var VM, parser: var Parser) =
 proc expression(vm: var VM, parser: var Parser)
 proc statement(vm: var VM, parser: var Parser)
 proc declaration(vm: var VM, parser: var Parser)
-proc getRule(`type`: TokenType): ptr ParseRule
+proc getRule(parser: var Parser, `type`: TokenType): ptr ParseRule
 proc parsePrecedence(vm: var VM, parser: var Parser, precedence: Precedence)
 
 proc identifierConstant(vm: var VM, parser: var Parser, name: Token): uint8 =
@@ -350,7 +350,7 @@ proc `and`(vm: var VM, parser: var Parser, canAssign: bool) =
 proc binary(vm: var VM, parser: var Parser, canAssign: bool) =
   let
     operatorType = parser.previous.`type`
-    rule = getRule(operatorType)
+    rule = getRule(parser, operatorType)
 
   parsePrecedence(vm, parser, Precedence(ord(rule.precedence) + 1))
 
@@ -518,8 +518,8 @@ proc unary(vm: var VM, parser: var Parser, canAssign: bool) =
   else:
     discard
 
-let rules: array[40, ParseRule] = [
-  ParseRule(prefix: grouping, infix: call, precedence: PrecCall),    # TokenLeftParen
+proc initRules(): array[40, ParseRule] =
+  [ParseRule(prefix: grouping, infix: call, precedence: PrecCall),   # TokenLeftParen
   ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenRightParen
   ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenLeftBrace
   ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenRightBrace
@@ -558,13 +558,12 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenVar
   ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenWhile
   ParseRule(prefix: nil, infix: nil, precedence: PrecNone),          # TokenError
-  ParseRule(prefix: nil, infix: nil, precedence: PrecNone)           # TokenEof
-]
+  ParseRule(prefix: nil, infix: nil, precedence: PrecNone)]          # TokenEof
 
 proc parsePrecedence(vm: var VM, parser: var Parser, precedence: Precedence) =
   advance(parser)
 
-  let prefixRule = getRule(parser.previous.`type`).prefix
+  let prefixRule = getRule(parser, parser.previous.`type`).prefix
 
   if isNil(prefixRule):
     error(parser, "Expect expression.")
@@ -574,18 +573,18 @@ proc parsePrecedence(vm: var VM, parser: var Parser, precedence: Precedence) =
 
   prefixRule(vm, parser, canAssign)
 
-  while precedence <= getRule(parser.current.`type`).precedence:
+  while precedence <= getRule(parser, parser.current.`type`).precedence:
     advance(parser)
 
-    let infixRule = getRule(parser.previous.`type`).infix
+    let infixRule = getRule(parser, parser.previous.`type`).infix
 
     infixRule(vm, parser, canAssign)
 
   if canAssign and match(parser, TokenEqual):
     error(parser, "Invalid assignment target.")
 
-proc getRule(`type`: TokenType): ptr ParseRule =
-  addr rules[ord(`type`)]
+proc getRule(parser: var Parser, `type`: TokenType): ptr ParseRule =
+  addr parser.rules[ord(`type`)]
 
 proc expression(vm: var VM, parser: var Parser) =
   parsePrecedence(vm, parser, PrecAssignment)
@@ -907,6 +906,7 @@ proc compile*(vm: var VM, source: var string): ptr ObjFunction =
 
   initCompiler(vm, compiler, parser, TypeScript)
 
+  parser.rules = initRules()
   parser.hadError = false
   parser.panicMode = false
 

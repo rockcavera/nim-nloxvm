@@ -109,6 +109,7 @@ type
   Parser* = object
     current*: Token
     previous*: Token
+    rules*: array[40, ParseRule]
     hadError*: bool
     panicMode*: bool
 
