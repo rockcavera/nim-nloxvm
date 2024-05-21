@@ -299,6 +299,8 @@ type
     grayCapacity*: int32
     grayStack*: ptr ptr Obj
 
+    currentCompiler*: ptr Compiler
+
   InterpretResult* = enum
     InterpretOk
     InterpretCompileError

@@ -79,6 +79,8 @@ proc initVM*(): VM =
   result.initString = nil
   result.initString = copyString(result, cast[ptr char](cstring"init"), 4)
 
+  result.currentCompiler = nil
+
   defineNative(result, cstring"clock", clockNative)
 
 proc freeVM*(vm: var VM) =

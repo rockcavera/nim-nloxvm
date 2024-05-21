@@ -1,6 +1,6 @@
 import system/ansi_c
 
-import ./globals, ./types, ./value_helpers
+import ./types, ./value_helpers
 
 when defined(debugLogGc):
   import std/strformat
@@ -187,7 +187,7 @@ proc freeObject*(vm: var VM, `object`: ptr Obj) =
 # compiler.nim
 
 proc markCompilerRoots(vm: var VM) =
-  var compiler = current
+  var compiler = vm.currentCompiler
 
   while not isNil(compiler):
     markObject(vm, cast[ptr Obj](compiler.function))

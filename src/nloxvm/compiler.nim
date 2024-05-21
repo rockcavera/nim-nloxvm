@@ -1,6 +1,6 @@
 import std/parseutils
 
-import ./chunk, ./common, ./globals, ./object, ./scanner, ./types, ./value_helpers
+import ./chunk, ./common, ./object, ./scanner, ./types, ./value_helpers
 
 when defined(debugPrintCode):
   import ./debug
@@ -16,8 +16,8 @@ var
 template lexeme(token: Token): openArray[char] =
   toOpenArray(cast[cstring](token.start), 0, token.length - 1)
 
-proc currentChunk(): var Chunk =
-  current.function.chunk
+proc currentChunk(vm: var VM): var Chunk =
+  vm.currentCompiler.function.chunk
 
 proc errorAt(token: var Token, message: ptr char) =
   if parser.panicMode:
@@ -86,7 +86,7 @@ proc match(`type`: TokenType): bool =
   true
 
 proc emitByte(vm: var VM, `byte`: uint8) =
-  writeChunk(vm, currentChunk(), `byte`, parser.previous.line)
+  writeChunk(vm, currentChunk(vm), `byte`, parser.previous.line)
 
 template emitByte(vm: var VM, opCode: OpCode) =
   emitByte(vm, uint8(opCode))
@@ -104,7 +104,7 @@ template emitBytes(vm: var VM, opCode: OpCode, `byte`: uint8) =
 proc emitLoop(vm: var VM, loopStart: int32) =
   emitByte(vm, OpLoop)
 
-  let offset = currentChunk().count - loopStart + 2
+  let offset = currentChunk(vm).count - loopStart + 2
 
   if offset > uint16Max:
     error("Loop body too large.")
@@ -117,13 +117,13 @@ proc emitJump(vm: var VM, instruction: uint8): int32 =
   emitByte(vm, 0xff)
   emitByte(vm, 0xff)
 
-  currentChunk().count - 2
+  currentChunk(vm).count - 2
 
 template emitJump(vm: var VM, instruction: OpCode): int32 =
   emitJump(vm, uint8(instruction))
 
 proc emitReturn(vm: var VM, ) =
-  if current.`type` == TypeInitializer:
+  if vm.currentCompiler.`type` == TypeInitializer:
     emitBytes(vm, OpGetLocal, 0)
   else:
     emitByte(vm, OpNil)
@@ -133,7 +133,7 @@ proc emitReturn(vm: var VM, ) =
 proc makeConstant(vm: var VM, value: Value): uint8 =
   const uint8Max = high(uint8).int32
 
-  let constant = addConstant(vm, currentChunk(), value)
+  let constant = addConstant(vm, currentChunk(vm), value)
 
   if constant > uint8Max:
     error("Too many constants in one chunk.")
@@ -144,30 +144,30 @@ proc makeConstant(vm: var VM, value: Value): uint8 =
 proc emitConstant(vm: var VM, value: Value) =
   emitBytes(vm, OpConstant, makeConstant(vm, value))
 
-proc patchJump(offset: int32) =
-  let jump = currentChunk().count - offset - 2
+proc patchJump(vm: var VM, offset: int32) =
+  let jump = currentChunk(vm).count - offset - 2
 
   if jump > uint16Max:
     error("Too much code to jump over.")
 
-  currentChunk().code[offset] = uint8((jump shr 8) and 0xff)
-  currentChunk().code[offset + 1] = uint8(jump and 0xff)
+  currentChunk(vm).code[offset] = uint8((jump shr 8) and 0xff)
+  currentChunk(vm).code[offset + 1] = uint8(jump and 0xff)
 
 proc initCompiler(vm: var VM, compiler: var Compiler, `type`: FunctionType) =
-  compiler.enclosing = current
+  compiler.enclosing = vm.currentCompiler
   compiler.function = nil
   compiler.`type` = `type`
   compiler.localCount = 0
   compiler.scopeDepth = 0
   compiler.function = newFunction(vm)
-  current = addr compiler
+  vm.currentCompiler = addr compiler
 
   if `type` != TypeScript:
-    current.function.name = copyString(vm, parser.previous.start, parser.previous.length)
+    vm.currentCompiler.function.name = copyString(vm, parser.previous.start, parser.previous.length)
 
-  var local = addr current.locals[current.localCount]
+  var local = addr vm.currentCompiler.locals[vm.currentCompiler.localCount]
 
-  inc(current.localCount)
+  inc(vm.currentCompiler.localCount)
 
   local.depth = 0
   local.isCaptured = false
@@ -182,7 +182,7 @@ proc initCompiler(vm: var VM, compiler: var Compiler, `type`: FunctionType) =
 proc endCompiler(vm: var VM): ptr ObjFunction =
   emitReturn(vm)
 
-  result = current.function
+  result = vm.currentCompiler.function
 
   when defined(debugPrintCode):
     if not parser.hadError:
@@ -190,21 +190,21 @@ proc endCompiler(vm: var VM): ptr ObjFunction =
                        if not isNil(result.name): result.name.chars
                        else: cast[ptr char](cstring"<script>"))
 
-  current = current.enclosing
+  vm.currentCompiler = vm.currentCompiler.enclosing
 
-proc beginScope() =
-  inc(current.scopeDepth)
+proc beginScope(vm: var VM) =
+  inc(vm.currentCompiler.scopeDepth)
 
 proc endScope(vm: var VM) =
-  dec(current.scopeDepth)
+  dec(vm.currentCompiler.scopeDepth)
 
-  while (current.localCount > 0) and (current.locals[current.localCount - 1].depth > current.scopeDepth):
-    if current.locals[current.localCount - 1].isCaptured:
+  while (vm.currentCompiler.localCount > 0) and (vm.currentCompiler.locals[vm.currentCompiler.localCount - 1].depth > vm.currentCompiler.scopeDepth):
+    if vm.currentCompiler.locals[vm.currentCompiler.localCount - 1].isCaptured:
       emitByte(vm, OpCloseUpvalue)
     else:
       emitByte(vm, OpPop)
 
-    dec(current.localCount)
+    dec(vm.currentCompiler.localCount)
 
 proc expression(vm: var VM)
 proc statement(vm: var VM)
@@ -270,57 +270,57 @@ proc resolveUpvalue(compiler: ptr Compiler, name: Token): int32 =
 
   -1
 
-proc addLocal(name: Token) =
-  if current.localCount == uint8Count:
+proc addLocal(vm: var VM, name: Token) =
+  if vm.currentCompiler.localCount == uint8Count:
     error("Too many local variables in function.")
     return
 
-  let tmp = current.localCount
+  let tmp = vm.currentCompiler.localCount
 
-  inc(current.localCount)
+  inc(vm.currentCompiler.localCount)
 
-  var local = addr current.locals[tmp]
+  var local = addr vm.currentCompiler.locals[tmp]
 
   local.name = name
   local.depth = -1
   local.isCaptured = false
 
-proc declareVariable() =
-  if current.scopeDepth == 0:
+proc declareVariable(vm: var VM) =
+  if vm.currentCompiler.scopeDepth == 0:
     return
 
   let name = parser.previous
 
-  for i in countdown(current.localCount  - 1, 0):
-    let local = addr current.locals[i]
+  for i in countdown(vm.currentCompiler.localCount  - 1, 0):
+    let local = addr vm.currentCompiler.locals[i]
 
-    if (local.depth != -1) and (local.depth < current.scopeDepth):
+    if (local.depth != -1) and (local.depth < vm.currentCompiler.scopeDepth):
       break
 
     if identifiersEqual(name, local.name):
       error("Already a variable with this name in this scope.")
 
-  addLocal(name)
+  addLocal(vm, name)
 
 proc parseVariable(vm: var VM, errorMessage: string): uint8 =
   consume(TokenIdentifier, errorMessage)
 
-  declareVariable()
+  declareVariable(vm)
 
-  if current.scopeDepth > 0:
+  if vm.currentCompiler.scopeDepth > 0:
     return 0
 
   identifierConstant(vm, parser.previous)
 
-proc markInitialized() =
-  if current.scopeDepth == 0:
+proc markInitialized(vm: var VM) =
+  if vm.currentCompiler.scopeDepth == 0:
     return
 
-  current.locals[current.localCount - 1].depth = current.scopeDepth
+  vm.currentCompiler.locals[vm.currentCompiler.localCount - 1].depth = vm.currentCompiler.scopeDepth
 
 proc defineVariable(vm: var VM, global: uint8) =
-  if current.scopeDepth > 0:
-    markInitialized()
+  if vm.currentCompiler.scopeDepth > 0:
+    markInitialized(vm)
     return
 
   emitBytes(vm, OpDefineGlobal, global)
@@ -347,7 +347,7 @@ proc `and`(vm: var VM, canAssign: bool) =
 
   parsePrecedence(vm, PrecAnd)
 
-  patchJump(endJump)
+  patchJump(vm, endJump)
 
 proc binary(vm: var VM, canAssign: bool) =
   let
@@ -431,13 +431,13 @@ proc `or`(vm: var VM, canAssign: bool) =
     elseJump = emitJump(vm, OpJumpIfFalse)
     endJump = emitJump(vm, OpJump)
 
-  patchJump(elseJump)
+  patchJump(vm, elseJump)
 
   emitByte(vm, OpPop)
 
   parsePrecedence(vm, PrecOr)
 
-  patchJump(endJump)
+  patchJump(vm, endJump)
 
 proc string(vm: var VM, canAssign: bool) =
   emitConstant(vm, objVal(copyString(vm, parser.previous.start + 1, parser.previous.length - 2)))
@@ -446,13 +446,13 @@ proc namedVariable(vm: var VM, name: Token, canAssign: bool) =
   var
     getOp: OpCode
     setOp: OpCode
-    arg = resolveLocal(current, name)
+    arg = resolveLocal(vm.currentCompiler, name)
 
   if arg != -1:
     getOp = OpGetLocal
     setOp = OpSetLocal
   else:
-    arg = resolveUpvalue(current, name)
+    arg = resolveUpvalue(vm.currentCompiler, name)
 
     if arg != -1:
       getOp = OpGetUpvalue
@@ -603,15 +603,15 @@ proc function(vm: var VM, `type`: FunctionType) =
 
   initCompiler(vm, compiler, `type`)
 
-  beginScope()
+  beginScope(vm)
 
   consume(TokenLeftParen, "Expect '(' after function name.")
 
   if not check(TokenRightParen):
     while true:
-      inc(current.function.arity)
+      inc(vm.currentCompiler.function.arity)
 
-      if current.function.arity > 255:
+      if vm.currentCompiler.function.arity > 255:
         errorAtCurrent("Can't have more than 255 parameters.")
 
       let constant = parseVariable(vm, "Expect parameter name.")
@@ -655,7 +655,7 @@ proc classDeclaration(vm: var VM) =
     className = parser.previous
     nameConstant = identifierConstant(vm, parser.previous)
 
-  declareVariable()
+  declareVariable(vm)
 
   emitBytes(vm, OpClass, nameConstant)
 
@@ -675,9 +675,9 @@ proc classDeclaration(vm: var VM) =
     if identifiersEqual(className, parser.previous):
       error("A class can't inherit from itself.")
 
-    beginScope()
+    beginScope(vm)
 
-    addLocal(syntheticToken(cstring"super"))
+    addLocal(vm, syntheticToken(cstring"super"))
 
     defineVariable(vm, 0)
 
@@ -706,7 +706,7 @@ proc classDeclaration(vm: var VM) =
 proc funDeclaration(vm: var VM) =
   let global = parseVariable(vm, "Expect function name.")
 
-  markInitialized()
+  markInitialized(vm)
 
   function(vm, TypeFunction)
 
@@ -732,7 +732,7 @@ proc expressionStatement(vm: var VM) =
   emitByte(vm, OpPop)
 
 proc forStatement(vm: var VM) =
-  beginScope()
+  beginScope(vm)
 
   consume(TokenLeftParen, "Expect '(' after 'for'.")
 
@@ -743,7 +743,7 @@ proc forStatement(vm: var VM) =
   else:
     expressionStatement(vm)
 
-  var loopStart = currentChunk().count
+  var loopStart = currentChunk(vm).count
 
   var exitJump = -1'i32
 
@@ -759,7 +759,7 @@ proc forStatement(vm: var VM) =
   if not match(TokenRightParen):
     let
       bodyJump = emitJump(vm, OpJump)
-      incrementStart = currentChunk().count
+      incrementStart = currentChunk(vm).count
 
     expression(vm)
 
@@ -771,14 +771,14 @@ proc forStatement(vm: var VM) =
 
     loopStart = incrementStart
 
-    patchJump(bodyJump)
+    patchJump(vm, bodyJump)
 
   statement(vm)
 
   emitLoop(vm, loopStart)
 
   if exitJump != -1:
-    patchJump(exitJump)
+    patchJump(vm, exitJump)
 
     emitByte(vm, OpPop)
 
@@ -799,14 +799,14 @@ proc ifStatement(vm: var VM) =
 
   let elseJump = emitJump(vm, OpJump)
 
-  patchJump(thenJump)
+  patchJump(vm, thenJump)
 
   emitByte(vm, OpPop)
 
   if match(TokenElse):
     statement(vm)
 
-  patchJump(elseJump)
+  patchJump(vm, elseJump)
 
 proc printStatement(vm: var VM) =
   expression(vm)
@@ -816,13 +816,13 @@ proc printStatement(vm: var VM) =
   emitByte(vm, OpPrint)
 
 proc returnStatement(vm: var VM) =
-  if current.`type` == TypeScript:
+  if vm.currentCompiler.`type` == TypeScript:
     error("Can't return from top-level code.")
 
   if match(TokenSemicolon):
     emitReturn(vm)
   else:
-    if current.`type` == TypeInitializer:
+    if vm.currentCompiler.`type` == TypeInitializer:
       error("Can't return a value from an initializer.")
 
     expression(vm)
@@ -832,7 +832,7 @@ proc returnStatement(vm: var VM) =
     emitByte(vm, OpReturn)
 
 proc whileStatement(vm: var VM) =
-  let loopStart = currentChunk().count
+  let loopStart = currentChunk(vm).count
 
   consume(TokenLeftParen, "Expect '(' after 'while'.")
 
@@ -848,7 +848,7 @@ proc whileStatement(vm: var VM) =
 
   emitLoop(vm, loopStart)
 
-  patchJump(exitJump)
+  patchJump(vm, exitJump)
 
   emitByte(vm, OpPop)
 
@@ -892,7 +892,7 @@ proc statement(vm: var VM) =
   elif match(TokenWhile):
     whileStatement(vm)
   elif match(TokenLeftBrace):
-    beginScope()
+    beginScope(vm)
 
     `block`(vm)
 
