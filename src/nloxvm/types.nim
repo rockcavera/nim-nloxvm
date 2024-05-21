@@ -125,7 +125,7 @@ type
     PrecCall        # . ()
     PrecPrimary
 
-  ParseFn* = proc(vm: var VM, canAssign: bool) {.nimcall.}
+  ParseFn* = proc(vm: var VM, parser: var Parser, canAssign: bool) {.nimcall.}
 
   ParseRule* = object
     prefix*: ParseFn

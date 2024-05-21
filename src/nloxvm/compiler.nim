@@ -9,9 +9,7 @@ import ./private/pointer_arithmetics
 
 const uint16Max = high(uint16).int32
 
-var
-  parser: Parser
-  currentClass: ptr ClassCompiler = nil
+var currentClass: ptr ClassCompiler = nil
 
 template lexeme(token: Token): openArray[char] =
   toOpenArray(cast[cstring](token.start), 0, token.length - 1)
@@ -19,7 +17,7 @@ template lexeme(token: Token): openArray[char] =
 proc currentChunk(vm: var VM): var Chunk =
   vm.currentCompiler.function.chunk
 
-proc errorAt(token: var Token, message: ptr char) =
+proc errorAt(parser: var Parser, token: var Token, message: ptr char) =
   if parser.panicMode:
     return
 
@@ -44,19 +42,19 @@ proc errorAt(token: var Token, message: ptr char) =
 
   parser.hadError = true
 
-proc error(message: ptr char) =
-  errorAt(parser.previous, message)
+proc error(parser: var Parser, message: ptr char) =
+  errorAt(parser, parser.previous, message)
 
-proc error(message: string) =
-  errorAt(parser.previous, addr message[0])
+proc error(parser: var Parser, message: string) =
+  errorAt(parser, parser.previous, addr message[0])
 
-proc errorAtCurrent(message: ptr char) =
-  errorAt(parser.current, message)
+proc errorAtCurrent(parser: var Parser, message: ptr char) =
+  errorAt(parser, parser.current, message)
 
-proc errorAtCurrent(message: string) =
-  errorAt(parser.current, addr message[0])
+proc errorAtCurrent(parser: var Parser, message: string) =
+  errorAt(parser, parser.current, addr message[0])
 
-proc advance() =
+proc advance(parser: var Parser) =
   parser.previous = parser.current
 
   while true:
@@ -65,95 +63,95 @@ proc advance() =
     if parser.current.`type` != TokenError:
       break
 
-    errorAtCurrent(parser.current.start)
+    errorAtCurrent(parser, parser.current.start)
 
-proc consume(`type`: TokenType, message: string) =
+proc consume(parser: var Parser, `type`: TokenType, message: string) =
   if parser.current.`type` == `type`:
-    advance()
+    advance(parser)
     return
 
-  errorAtCurrent(addr message[0])
+  errorAtCurrent(parser, addr message[0])
 
-proc check(`type`: TokenType): bool =
+proc check(parser: var Parser, `type`: TokenType): bool =
   parser.current.`type` == `type`
 
-proc match(`type`: TokenType): bool =
-  if not check(`type`):
+proc match(parser: var Parser, `type`: TokenType): bool =
+  if not check(parser, `type`):
     return false
 
-  advance()
+  advance(parser)
 
   true
 
-proc emitByte(vm: var VM, `byte`: uint8) =
+proc emitByte(vm: var VM, parser: var Parser, `byte`: uint8) =
   writeChunk(vm, currentChunk(vm), `byte`, parser.previous.line)
 
-template emitByte(vm: var VM, opCode: OpCode) =
-  emitByte(vm, uint8(opCode))
+template emitByte(vm: var VM, parser: var Parser, opCode: OpCode) =
+  emitByte(vm, parser, uint8(opCode))
 
-proc emitBytes(vm: var VM, byte1: uint8, byte2: uint8) =
-  emitByte(vm, byte1)
-  emitByte(vm, byte2)
+proc emitBytes(vm: var VM, parser: var Parser, byte1: uint8, byte2: uint8) =
+  emitByte(vm, parser, byte1)
+  emitByte(vm, parser, byte2)
 
-template emitBytes(vm: var VM, opCode1: OpCode, opCode2: OpCode) =
-  emitBytes(vm, uint8(opCode1), uint8(opCode2))
+template emitBytes(vm: var VM, parser: var Parser, opCode1: OpCode, opCode2: OpCode) =
+  emitBytes(vm, parser, uint8(opCode1), uint8(opCode2))
 
-template emitBytes(vm: var VM, opCode: OpCode, `byte`: uint8) =
-  emitBytes(vm, uint8(opCode), `byte`)
+template emitBytes(vm: var VM, parser: var Parser, opCode: OpCode, `byte`: uint8) =
+  emitBytes(vm, parser, uint8(opCode), `byte`)
 
-proc emitLoop(vm: var VM, loopStart: int32) =
-  emitByte(vm, OpLoop)
+proc emitLoop(vm: var VM, parser: var Parser, loopStart: int32) =
+  emitByte(vm, parser, OpLoop)
 
   let offset = currentChunk(vm).count - loopStart + 2
 
   if offset > uint16Max:
-    error("Loop body too large.")
+    error(parser, "Loop body too large.")
 
-  emitByte(vm, uint8((offset shr 8) and 0xff))
-  emitByte(vm, uint8(offset and 0xff))
+  emitByte(vm, parser, uint8((offset shr 8) and 0xff))
+  emitByte(vm, parser, uint8(offset and 0xff))
 
-proc emitJump(vm: var VM, instruction: uint8): int32 =
-  emitByte(vm, instruction)
-  emitByte(vm, 0xff)
-  emitByte(vm, 0xff)
+proc emitJump(vm: var VM, parser: var Parser, instruction: uint8): int32 =
+  emitByte(vm, parser, instruction)
+  emitByte(vm, parser, 0xff)
+  emitByte(vm, parser, 0xff)
 
   currentChunk(vm).count - 2
 
-template emitJump(vm: var VM, instruction: OpCode): int32 =
-  emitJump(vm, uint8(instruction))
+template emitJump(vm: var VM, parser: var Parser, instruction: OpCode): int32 =
+  emitJump(vm, parser, uint8(instruction))
 
-proc emitReturn(vm: var VM, ) =
+proc emitReturn(vm: var VM, parser: var Parser) =
   if vm.currentCompiler.`type` == TypeInitializer:
-    emitBytes(vm, OpGetLocal, 0)
+    emitBytes(vm, parser, OpGetLocal, 0)
   else:
-    emitByte(vm, OpNil)
+    emitByte(vm, parser, OpNil)
 
-  emitByte(vm, OpReturn)
+  emitByte(vm, parser, OpReturn)
 
-proc makeConstant(vm: var VM, value: Value): uint8 =
+proc makeConstant(vm: var VM, parser: var Parser, value: Value): uint8 =
   const uint8Max = high(uint8).int32
 
   let constant = addConstant(vm, currentChunk(vm), value)
 
   if constant > uint8Max:
-    error("Too many constants in one chunk.")
+    error(parser, "Too many constants in one chunk.")
     return 0'u8
 
   uint8(constant)
 
-proc emitConstant(vm: var VM, value: Value) =
-  emitBytes(vm, OpConstant, makeConstant(vm, value))
+proc emitConstant(vm: var VM, parser: var Parser, value: Value) =
+  emitBytes(vm, parser, OpConstant, makeConstant(vm, parser, value))
 
-proc patchJump(vm: var VM, offset: int32) =
+proc patchJump(vm: var VM, parser: var Parser, offset: int32) =
   let jump = currentChunk(vm).count - offset - 2
 
   if jump > uint16Max:
-    error("Too much code to jump over.")
+    error(parser, "Too much code to jump over.")
 
   currentChunk(vm).code[offset] = uint8((jump shr 8) and 0xff)
   currentChunk(vm).code[offset + 1] = uint8(jump and 0xff)
 
-proc initCompiler(vm: var VM, compiler: var Compiler, `type`: FunctionType) =
+proc initCompiler(vm: var VM, compiler: var Compiler, parser: var Parser, `type`: FunctionType) =
   compiler.enclosing = vm.currentCompiler
   compiler.function = nil
   compiler.`type` = `type`
@@ -179,8 +177,8 @@ proc initCompiler(vm: var VM, compiler: var Compiler, `type`: FunctionType) =
     local.name.start = cast[ptr char](cstring"")
     local.name.length = 0
 
-proc endCompiler(vm: var VM): ptr ObjFunction =
-  emitReturn(vm)
+proc endCompiler(vm: var VM, parser: var Parser): ptr ObjFunction =
+  emitReturn(vm, parser)
 
   result = vm.currentCompiler.function
 
@@ -195,25 +193,25 @@ proc endCompiler(vm: var VM): ptr ObjFunction =
 proc beginScope(vm: var VM) =
   inc(vm.currentCompiler.scopeDepth)
 
-proc endScope(vm: var VM) =
+proc endScope(vm: var VM, parser: var Parser) =
   dec(vm.currentCompiler.scopeDepth)
 
   while (vm.currentCompiler.localCount > 0) and (vm.currentCompiler.locals[vm.currentCompiler.localCount - 1].depth > vm.currentCompiler.scopeDepth):
     if vm.currentCompiler.locals[vm.currentCompiler.localCount - 1].isCaptured:
-      emitByte(vm, OpCloseUpvalue)
+      emitByte(vm, parser, OpCloseUpvalue)
     else:
-      emitByte(vm, OpPop)
+      emitByte(vm, parser, OpPop)
 
     dec(vm.currentCompiler.localCount)
 
-proc expression(vm: var VM)
-proc statement(vm: var VM)
-proc declaration(vm: var VM)
+proc expression(vm: var VM, parser: var Parser)
+proc statement(vm: var VM, parser: var Parser)
+proc declaration(vm: var VM, parser: var Parser)
 proc getRule(`type`: TokenType): ptr ParseRule
-proc parsePrecedence(vm: var VM, precedence: Precedence)
+proc parsePrecedence(vm: var VM, parser: var Parser, precedence: Precedence)
 
-proc identifierConstant(vm: var VM, name: Token): uint8 =
-  makeConstant(vm, objVal(copyString(vm, name.start, name.length)))
+proc identifierConstant(vm: var VM, parser: var Parser, name: Token): uint8 =
+  makeConstant(vm, parser, objVal(copyString(vm, name.start, name.length)))
 
 proc identifiersEqual(a: Token, b: Token): bool =
   if a.length != b.length:
@@ -221,19 +219,19 @@ proc identifiersEqual(a: Token, b: Token): bool =
 
   cmpMem(a.start, b.start, a.length) == 0
 
-proc resolveLocal(compiler: ptr Compiler, name: Token): int32 =
+proc resolveLocal(compiler: ptr Compiler, parser: var Parser, name: Token): int32 =
   for i in countdown(compiler.localCount - 1, 0):
     let local = addr compiler.locals[i]
 
     if identifiersEqual(name, local.name):
       if local.depth == -1:
-        error("Can't read local variable in its own initializer.")
+        error(parser, "Can't read local variable in its own initializer.")
 
       return i
 
   -1
 
-proc addUpvalue(compiler: ptr Compiler, index: uint8, isLocal: bool): int32 =
+proc addUpvalue(compiler: ptr Compiler, parser: var Parser, index: uint8, isLocal: bool): int32 =
   let upvalueCount = compiler.function.upvalueCount
 
   for i in 0'i32 ..< upvalueCount:
@@ -243,7 +241,7 @@ proc addUpvalue(compiler: ptr Compiler, index: uint8, isLocal: bool): int32 =
       return i
 
   if upvalueCount == uint8Count:
-    error("Too many closure variables in function.")
+    error(parser, "Too many closure variables in function.")
     return 0
 
   compiler.upvalues[upvalueCount].isLocal = isLocal
@@ -253,26 +251,26 @@ proc addUpvalue(compiler: ptr Compiler, index: uint8, isLocal: bool): int32 =
 
   return upvalueCount
 
-proc resolveUpvalue(compiler: ptr Compiler, name: Token): int32 =
+proc resolveUpvalue(compiler: ptr Compiler, parser: var Parser, name: Token): int32 =
   if isNil(compiler.enclosing):
     return -1
 
-  let local = resolveLocal(compiler.enclosing, name)
+  let local = resolveLocal(compiler.enclosing, parser, name)
 
   if local != -1:
     compiler.enclosing.locals[local].isCaptured = true
-    return addUpvalue(compiler, uint8(local), true)
+    return addUpvalue(compiler, parser, uint8(local), true)
 
-  let upvalue = resolveUpvalue(compiler.enclosing, name)
+  let upvalue = resolveUpvalue(compiler.enclosing, parser, name)
 
   if upvalue != -1:
-    return addUpvalue(compiler, uint8(upvalue), false)
+    return addUpvalue(compiler, parser, uint8(upvalue), false)
 
   -1
 
-proc addLocal(vm: var VM, name: Token) =
+proc addLocal(vm: var VM, parser: var Parser, name: Token) =
   if vm.currentCompiler.localCount == uint8Count:
-    error("Too many local variables in function.")
+    error(parser, "Too many local variables in function.")
     return
 
   let tmp = vm.currentCompiler.localCount
@@ -285,7 +283,7 @@ proc addLocal(vm: var VM, name: Token) =
   local.depth = -1
   local.isCaptured = false
 
-proc declareVariable(vm: var VM) =
+proc declareVariable(vm: var VM, parser: var Parser) =
   if vm.currentCompiler.scopeDepth == 0:
     return
 
@@ -298,19 +296,19 @@ proc declareVariable(vm: var VM) =
       break
 
     if identifiersEqual(name, local.name):
-      error("Already a variable with this name in this scope.")
+      error(parser, "Already a variable with this name in this scope.")
 
-  addLocal(vm, name)
+  addLocal(vm, parser, name)
 
-proc parseVariable(vm: var VM, errorMessage: string): uint8 =
-  consume(TokenIdentifier, errorMessage)
+proc parseVariable(vm: var VM, parser: var Parser, errorMessage: string): uint8 =
+  consume(parser, TokenIdentifier, errorMessage)
 
-  declareVariable(vm)
+  declareVariable(vm, parser)
 
   if vm.currentCompiler.scopeDepth > 0:
     return 0
 
-  identifierConstant(vm, parser.previous)
+  identifierConstant(vm, parser, parser.previous)
 
 proc markInitialized(vm: var VM) =
   if vm.currentCompiler.scopeDepth == 0:
@@ -318,205 +316,205 @@ proc markInitialized(vm: var VM) =
 
   vm.currentCompiler.locals[vm.currentCompiler.localCount - 1].depth = vm.currentCompiler.scopeDepth
 
-proc defineVariable(vm: var VM, global: uint8) =
+proc defineVariable(vm: var VM, parser: var Parser, global: uint8) =
   if vm.currentCompiler.scopeDepth > 0:
     markInitialized(vm)
     return
 
-  emitBytes(vm, OpDefineGlobal, global)
+  emitBytes(vm, parser, OpDefineGlobal, global)
 
-proc argumentList(vm: var VM): uint8 =
-  if not check(TokenRightParen):
+proc argumentList(vm: var VM, parser: var Parser): uint8 =
+  if not check(parser, TokenRightParen):
     while true:
-      expression(vm)
+      expression(vm, parser)
 
       if result == 255:
-        error("Can't have more than 255 arguments.")
+        error(parser, "Can't have more than 255 arguments.")
 
       inc(result)
 
-      if not match(TokenComma):
+      if not match(parser, TokenComma):
         break
 
-  consume(TokenRightParen, "Expect ')' after arguments.")
+  consume(parser, TokenRightParen, "Expect ')' after arguments.")
 
-proc `and`(vm: var VM, canAssign: bool) =
-  let endJump = emitJump(vm, OpJumpIfFalse)
+proc `and`(vm: var VM, parser: var Parser, canAssign: bool) =
+  let endJump = emitJump(vm, parser, OpJumpIfFalse)
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
-  parsePrecedence(vm, PrecAnd)
+  parsePrecedence(vm, parser, PrecAnd)
 
-  patchJump(vm, endJump)
+  patchJump(vm, parser, endJump)
 
-proc binary(vm: var VM, canAssign: bool) =
+proc binary(vm: var VM, parser: var Parser, canAssign: bool) =
   let
     operatorType = parser.previous.`type`
     rule = getRule(operatorType)
 
-  parsePrecedence(vm, Precedence(ord(rule.precedence) + 1))
+  parsePrecedence(vm, parser, Precedence(ord(rule.precedence) + 1))
 
   case operatorType
   of TokenBangEqual:
-    emitBytes(vm, OpEqual, OpNot)
+    emitBytes(vm, parser, OpEqual, OpNot)
   of TokenEqualEqual:
-    emitByte(vm, OpEqual)
+    emitByte(vm, parser, OpEqual)
   of TokenGreater:
-    emitByte(vm, OpGreater)
+    emitByte(vm, parser, OpGreater)
   of TokenGreaterEqual:
-    emitBytes(vm, OpLess, OpNot)
+    emitBytes(vm, parser, OpLess, OpNot)
   of TokenLess:
-    emitByte(vm, OpLess)
+    emitByte(vm, parser, OpLess)
   of TokenLessEqual:
-    emitBytes(vm, OpGreater, OpNot)
+    emitBytes(vm, parser, OpGreater, OpNot)
   of TokenPlus:
-    emitByte(vm, OpAdd)
+    emitByte(vm, parser, OpAdd)
   of TokenMinus:
-    emitByte(vm, OpSubtract)
+    emitByte(vm, parser, OpSubtract)
   of TokenStar:
-    emitByte(vm, OpMultiply)
+    emitByte(vm, parser, OpMultiply)
   of TokenSlash:
-    emitByte(vm, OpDivide)
+    emitByte(vm, parser, OpDivide)
   else:
     discard
 
-proc call(vm: var VM, canAssign: bool) =
-  let argCount = argumentList(vm)
+proc call(vm: var VM, parser: var Parser, canAssign: bool) =
+  let argCount = argumentList(vm, parser)
 
-  emitBytes(vm, OpCall, argCount)
+  emitBytes(vm, parser, OpCall, argCount)
 
-proc dot(vm: var VM, canAssign: bool) =
-  consume(TokenIdentifier, "Expect property name after '.'.")
+proc dot(vm: var VM, parser: var Parser, canAssign: bool) =
+  consume(parser, TokenIdentifier, "Expect property name after '.'.")
 
-  let name = identifierConstant(vm, parser.previous)
+  let name = identifierConstant(vm, parser, parser.previous)
 
-  if canAssign and match(TokenEqual):
-    expression(vm)
+  if canAssign and match(parser, TokenEqual):
+    expression(vm, parser)
 
-    emitBytes(vm, OpSetProperty, name)
-  elif match(TokenLeftParen):
-    let argCount = argumentList(vm)
+    emitBytes(vm, parser, OpSetProperty, name)
+  elif match(parser, TokenLeftParen):
+    let argCount = argumentList(vm, parser)
 
-    emitBytes(vm, OpInvoke, name)
+    emitBytes(vm, parser, OpInvoke, name)
 
-    emitByte(vm, argCount)
+    emitByte(vm, parser, argCount)
   else:
-    emitBytes(vm, OpGetProperty, name)
+    emitBytes(vm, parser, OpGetProperty, name)
 
-proc literal(vm: var VM, canAssign: bool) =
+proc literal(vm: var VM, parser: var Parser, canAssign: bool) =
   case parser.previous.`type`
   of TokenFalse:
-    emitByte(vm, OpFalse)
+    emitByte(vm, parser, OpFalse)
   of TokenNil:
-    emitByte(vm, OpNil)
+    emitByte(vm, parser, OpNil)
   of TokenTrue:
-    emitByte(vm, OpTrue)
+    emitByte(vm, parser, OpTrue)
   else:
     discard
 
-proc grouping(vm: var VM, canAssign: bool) =
-  expression(vm)
+proc grouping(vm: var VM, parser: var Parser, canAssign: bool) =
+  expression(vm, parser)
 
-  consume(TokenRightParen, "Expect ')' after expression.")
+  consume(parser, TokenRightParen, "Expect ')' after expression.")
 
-proc number(vm: var VM, canAssign: bool) =
+proc number(vm: var VM, parser: var Parser, canAssign: bool) =
   var value: float
 
   discard parseFloat(lexeme(parser.previous), value)
 
-  emitConstant(vm, numberVal(value))
+  emitConstant(vm, parser, numberVal(value))
 
-proc `or`(vm: var VM, canAssign: bool) =
+proc `or`(vm: var VM, parser: var Parser, canAssign: bool) =
   let
-    elseJump = emitJump(vm, OpJumpIfFalse)
-    endJump = emitJump(vm, OpJump)
+    elseJump = emitJump(vm, parser, OpJumpIfFalse)
+    endJump = emitJump(vm, parser, OpJump)
 
-  patchJump(vm, elseJump)
+  patchJump(vm, parser, elseJump)
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
-  parsePrecedence(vm, PrecOr)
+  parsePrecedence(vm, parser, PrecOr)
 
-  patchJump(vm, endJump)
+  patchJump(vm, parser, endJump)
 
-proc string(vm: var VM, canAssign: bool) =
-  emitConstant(vm, objVal(copyString(vm, parser.previous.start + 1, parser.previous.length - 2)))
+proc string(vm: var VM, parser: var Parser, canAssign: bool) =
+  emitConstant(vm, parser, objVal(copyString(vm, parser.previous.start + 1, parser.previous.length - 2)))
 
-proc namedVariable(vm: var VM, name: Token, canAssign: bool) =
+proc namedVariable(vm: var VM, parser: var Parser, name: Token, canAssign: bool) =
   var
     getOp: OpCode
     setOp: OpCode
-    arg = resolveLocal(vm.currentCompiler, name)
+    arg = resolveLocal(vm.currentCompiler, parser, name)
 
   if arg != -1:
     getOp = OpGetLocal
     setOp = OpSetLocal
   else:
-    arg = resolveUpvalue(vm.currentCompiler, name)
+    arg = resolveUpvalue(vm.currentCompiler, parser, name)
 
     if arg != -1:
       getOp = OpGetUpvalue
       setOp = OpSetUpvalue
     else:
-      arg = identifierConstant(vm, name).int32
+      arg = identifierConstant(vm, parser, name).int32
       getOp = OpGetGlobal
       setOp = OpSetGlobal
 
-  if canAssign and match(TokenEqual):
-    expression(vm)
+  if canAssign and match(parser, TokenEqual):
+    expression(vm, parser)
 
-    emitBytes(vm, setOp, uint8(arg))
+    emitBytes(vm, parser, setOp, uint8(arg))
   else:
-    emitBytes(vm, getOp, uint8(arg))
+    emitBytes(vm, parser, getOp, uint8(arg))
 
-proc variable(vm: var VM, canAssign: bool) =
-  namedVariable(vm, parser.previous, canAssign)
+proc variable(vm: var VM, parser: var Parser, canAssign: bool) =
+  namedVariable(vm, parser, parser.previous, canAssign)
 
 proc syntheticToken(text: cstring): Token =
   result.start = cast[ptr char](text)
   result.length = len(text).int32
 
-proc super(vm: var VM, canAssign: bool) =
+proc super(vm: var VM, parser: var Parser, canAssign: bool) =
   if isNil(currentClass):
-    error("Can't use 'super' outside of a class.")
+    error(parser, "Can't use 'super' outside of a class.")
   elif not currentClass.hasSuperclass:
-    error("Can't use 'super' in a class with no superclass.")
+    error(parser, "Can't use 'super' in a class with no superclass.")
 
-  consume(TokenDot, "Expect '.' after 'super'.")
-  consume(TokenIdentifier, "Expect superclass method name.")
+  consume(parser, TokenDot, "Expect '.' after 'super'.")
+  consume(parser, TokenIdentifier, "Expect superclass method name.")
 
-  let name = identifierConstant(vm, parser.previous)
+  let name = identifierConstant(vm, parser, parser.previous)
 
-  namedVariable(vm, syntheticToken(cstring"this"), false)
+  namedVariable(vm, parser, syntheticToken(cstring"this"), false)
 
-  if match(TokenLeftParen):
-    let argCount = argumentList(vm)
+  if match(parser, TokenLeftParen):
+    let argCount = argumentList(vm, parser)
 
-    namedVariable(vm, syntheticToken(cstring"super"), false)
+    namedVariable(vm, parser, syntheticToken(cstring"super"), false)
 
-    emitBytes(vm, OpSuperInvoke, name)
-    emitByte(vm, argCount)
+    emitBytes(vm, parser, OpSuperInvoke, name)
+    emitByte(vm, parser, argCount)
   else:
-    namedVariable(vm, syntheticToken(cstring"super"), false)
-    emitBytes(vm, OpGetSuper, name)
+    namedVariable(vm, parser, syntheticToken(cstring"super"), false)
+    emitBytes(vm, parser, OpGetSuper, name)
 
-proc this(vm: var VM, canAssign: bool) =
+proc this(vm: var VM, parser: var Parser, canAssign: bool) =
   if isNil(currentClass):
-    error("Can't use 'this' outside of a class.")
+    error(parser, "Can't use 'this' outside of a class.")
     return
 
-  variable(vm, false)
+  variable(vm, parser, false)
 
-proc unary(vm: var VM, canAssign: bool) =
+proc unary(vm: var VM, parser: var Parser, canAssign: bool) =
   let operatorType = parser.previous.`type`
 
-  parsePrecedence(vm, PrecUnary)
+  parsePrecedence(vm, parser, PrecUnary)
 
   case operatorType
   of TokenBang:
-    emitByte(vm, OpNot)
+    emitByte(vm, parser, OpNot)
   of TokenMinus:
-    emitByte(vm, OpNegate)
+    emitByte(vm, parser, OpNegate)
   else:
     discard
 
@@ -563,103 +561,103 @@ let rules: array[40, ParseRule] = [
   ParseRule(prefix: nil, infix: nil, precedence: PrecNone)           # TokenEof
 ]
 
-proc parsePrecedence(vm: var VM, precedence: Precedence) =
-  advance()
+proc parsePrecedence(vm: var VM, parser: var Parser, precedence: Precedence) =
+  advance(parser)
 
   let prefixRule = getRule(parser.previous.`type`).prefix
 
   if isNil(prefixRule):
-    error("Expect expression.")
+    error(parser, "Expect expression.")
     return
 
   let canAssign = precedence <= PrecAssignment
 
-  prefixRule(vm, canAssign)
+  prefixRule(vm, parser, canAssign)
 
   while precedence <= getRule(parser.current.`type`).precedence:
-    advance()
+    advance(parser)
 
     let infixRule = getRule(parser.previous.`type`).infix
 
-    infixRule(vm, canAssign)
+    infixRule(vm, parser, canAssign)
 
-  if canAssign and match(TokenEqual):
-    error("Invalid assignment target.")
+  if canAssign and match(parser, TokenEqual):
+    error(parser, "Invalid assignment target.")
 
 proc getRule(`type`: TokenType): ptr ParseRule =
   addr rules[ord(`type`)]
 
-proc expression(vm: var VM) =
-  parsePrecedence(vm, PrecAssignment)
+proc expression(vm: var VM, parser: var Parser) =
+  parsePrecedence(vm, parser, PrecAssignment)
 
-proc `block`(vm: var VM) =
-  while not(check(TokenRightBrace)) and not(check(TokenEof)):
-    declaration(vm)
+proc `block`(vm: var VM, parser: var Parser) =
+  while not(check(parser, TokenRightBrace)) and not(check(parser, TokenEof)):
+    declaration(vm, parser)
 
-  consume(TokenRightBrace, "Expect '}' after block.")
+  consume(parser, TokenRightBrace, "Expect '}' after block.")
 
-proc function(vm: var VM, `type`: FunctionType) =
+proc function(vm: var VM, parser: var Parser, `type`: FunctionType) =
   var compiler: Compiler
 
-  initCompiler(vm, compiler, `type`)
+  initCompiler(vm, compiler, parser, `type`)
 
   beginScope(vm)
 
-  consume(TokenLeftParen, "Expect '(' after function name.")
+  consume(parser, TokenLeftParen, "Expect '(' after function name.")
 
-  if not check(TokenRightParen):
+  if not check(parser, TokenRightParen):
     while true:
       inc(vm.currentCompiler.function.arity)
 
       if vm.currentCompiler.function.arity > 255:
-        errorAtCurrent("Can't have more than 255 parameters.")
+        errorAtCurrent(parser, "Can't have more than 255 parameters.")
 
-      let constant = parseVariable(vm, "Expect parameter name.")
+      let constant = parseVariable(vm, parser, "Expect parameter name.")
 
-      defineVariable(vm, constant)
+      defineVariable(vm, parser, constant)
 
-      if not match(TokenComma):
+      if not match(parser, TokenComma):
         break
 
-  consume(TokenRightParen, "Expect ')' after parameters.")
-  consume(TokenLeftBrace, "Expect '{' before function body.")
+  consume(parser, TokenRightParen, "Expect ')' after parameters.")
+  consume(parser, TokenLeftBrace, "Expect '{' before function body.")
 
-  `block`(vm)
+  `block`(vm, parser)
 
-  let function = endCompiler(vm)
+  let function = endCompiler(vm, parser)
 
-  emitBytes(vm, OpClosure, makeConstant(vm, objVal(function)))
+  emitBytes(vm, parser, OpClosure, makeConstant(vm, parser, objVal(function)))
 
   for i in 0 ..< function.upvalueCount:
-    emitByte(vm, if compiler.upvalues[i].isLocal: 1 else: 0)
-    emitByte(vm, compiler.upvalues[i].index)
+    emitByte(vm, parser, if compiler.upvalues[i].isLocal: 1 else: 0)
+    emitByte(vm, parser, compiler.upvalues[i].index)
 
-proc `method`(vm: var VM) =
-  consume(TokenIdentifier, "Expect method name.")
+proc `method`(vm: var VM, parser: var Parser) =
+  consume(parser, TokenIdentifier, "Expect method name.")
 
-  let constant = identifierConstant(vm, parser.previous)
+  let constant = identifierConstant(vm, parser, parser.previous)
 
   var `type` = TypeMethod
 
   if parser.previous.length == 4 and cmpMem(parser.previous.start, cstring"init", 4) == 0:
     `type` = TypeInitializer
 
-  function(vm, `type`)
+  function(vm, parser, `type`)
 
-  emitBytes(vm, OpMethod, constant)
+  emitBytes(vm, parser, OpMethod, constant)
 
-proc classDeclaration(vm: var VM) =
-  consume(TokenIdentifier, "Expect class name.")
+proc classDeclaration(vm: var VM, parser: var Parser) =
+  consume(parser, TokenIdentifier, "Expect class name.")
 
   let
     className = parser.previous
-    nameConstant = identifierConstant(vm, parser.previous)
+    nameConstant = identifierConstant(vm, parser, parser.previous)
 
-  declareVariable(vm)
+  declareVariable(vm, parser)
 
-  emitBytes(vm, OpClass, nameConstant)
+  emitBytes(vm, parser, OpClass, nameConstant)
 
-  defineVariable(vm, nameConstant)
+  defineVariable(vm, parser, nameConstant)
 
   var classCompiler: ClassCompiler
 
@@ -667,192 +665,192 @@ proc classDeclaration(vm: var VM) =
   classCompiler.enclosing = currentClass
   currentClass = addr classCompiler
 
-  if match(TokenLess):
-    consume(TokenIdentifier, "Expect superclass name.")
+  if match(parser, TokenLess):
+    consume(parser, TokenIdentifier, "Expect superclass name.")
 
-    variable(vm, false)
+    variable(vm, parser, false)
 
     if identifiersEqual(className, parser.previous):
-      error("A class can't inherit from itself.")
+      error(parser, "A class can't inherit from itself.")
 
     beginScope(vm)
 
-    addLocal(vm, syntheticToken(cstring"super"))
+    addLocal(vm, parser, syntheticToken(cstring"super"))
 
-    defineVariable(vm, 0)
+    defineVariable(vm, parser, 0)
 
-    namedVariable(vm, className, false)
+    namedVariable(vm, parser, className, false)
 
-    emitByte(vm, OpInherit)
+    emitByte(vm, parser, OpInherit)
 
     classCompiler.hasSuperclass = true
 
-  namedVariable(vm, className, false)
+  namedVariable(vm, parser, className, false)
 
-  consume(TokenLeftBrace, "Expect '{' before class body.")
+  consume(parser, TokenLeftBrace, "Expect '{' before class body.")
 
-  while not(check(TokenRightBrace)) and not(check(TokenEof)):
-    `method`(vm)
+  while not(check(parser, TokenRightBrace)) and not(check(parser, TokenEof)):
+    `method`(vm, parser)
 
-  consume(TokenRightBrace, "Expect '}' after class body.")
+  consume(parser, TokenRightBrace, "Expect '}' after class body.")
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
   if classCompiler.hasSuperclass:
-    endScope(vm)
+    endScope(vm, parser)
 
   currentClass = currentClass.enclosing
 
-proc funDeclaration(vm: var VM) =
-  let global = parseVariable(vm, "Expect function name.")
+proc funDeclaration(vm: var VM, parser: var Parser) =
+  let global = parseVariable(vm, parser, "Expect function name.")
 
   markInitialized(vm)
 
-  function(vm, TypeFunction)
+  function(vm, parser, TypeFunction)
 
-  defineVariable(vm, global)
+  defineVariable(vm, parser, global)
 
-proc varDeclaration(vm: var VM) =
-  let global = parseVariable(vm, "Expect variable name.")
+proc varDeclaration(vm: var VM, parser: var Parser) =
+  let global = parseVariable(vm, parser, "Expect variable name.")
 
-  if match(TokenEqual):
-    expression(vm)
+  if match(parser, TokenEqual):
+    expression(vm, parser)
   else:
-    emitByte(vm, OpNil)
+    emitByte(vm, parser, OpNil)
 
-  consume(TokenSemicolon, "Expect ';' after variable declaration.")
+  consume(parser, TokenSemicolon, "Expect ';' after variable declaration.")
 
-  defineVariable(vm, global)
+  defineVariable(vm, parser, global)
 
-proc expressionStatement(vm: var VM) =
-  expression(vm)
+proc expressionStatement(vm: var VM, parser: var Parser) =
+  expression(vm, parser)
 
-  consume(TokenSemicolon, "Expect ';' after expression.")
+  consume(parser, TokenSemicolon, "Expect ';' after expression.")
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
-proc forStatement(vm: var VM) =
+proc forStatement(vm: var VM, parser: var Parser) =
   beginScope(vm)
 
-  consume(TokenLeftParen, "Expect '(' after 'for'.")
+  consume(parser, TokenLeftParen, "Expect '(' after 'for'.")
 
-  if match(TokenSemicolon):
+  if match(parser, TokenSemicolon):
     discard
-  elif match(TokenVar):
-    varDeclaration(vm)
+  elif match(parser, TokenVar):
+    varDeclaration(vm, parser)
   else:
-    expressionStatement(vm)
+    expressionStatement(vm, parser)
 
   var loopStart = currentChunk(vm).count
 
   var exitJump = -1'i32
 
-  if not match(TokenSemicolon):
-    expression(vm)
+  if not match(parser, TokenSemicolon):
+    expression(vm, parser)
 
-    consume(TokenSemicolon, "Expect ';' after loop condition.")
+    consume(parser, TokenSemicolon, "Expect ';' after loop condition.")
 
-    exitJump = emitJump(vm, OpJumpIfFalse)
+    exitJump = emitJump(vm, parser, OpJumpIfFalse)
 
-    emitByte(vm, OpPop)
+    emitByte(vm, parser, OpPop)
 
-  if not match(TokenRightParen):
+  if not match(parser, TokenRightParen):
     let
-      bodyJump = emitJump(vm, OpJump)
+      bodyJump = emitJump(vm, parser, OpJump)
       incrementStart = currentChunk(vm).count
 
-    expression(vm)
+    expression(vm, parser)
 
-    emitByte(vm, OpPop)
+    emitByte(vm, parser, OpPop)
 
-    consume(TokenRightParen, "Expect ')' after for clauses.")
+    consume(parser, TokenRightParen, "Expect ')' after for clauses.")
 
-    emitLoop(vm, loopStart)
+    emitLoop(vm, parser, loopStart)
 
     loopStart = incrementStart
 
-    patchJump(vm, bodyJump)
+    patchJump(vm, parser, bodyJump)
 
-  statement(vm)
+  statement(vm, parser)
 
-  emitLoop(vm, loopStart)
+  emitLoop(vm, parser, loopStart)
 
   if exitJump != -1:
-    patchJump(vm, exitJump)
+    patchJump(vm, parser, exitJump)
 
-    emitByte(vm, OpPop)
+    emitByte(vm, parser, OpPop)
 
-  endScope(vm)
+  endScope(vm, parser)
 
-proc ifStatement(vm: var VM) =
-  consume(TokenLeftParen, "Expect '(' after 'if'.")
+proc ifStatement(vm: var VM, parser: var Parser) =
+  consume(parser, TokenLeftParen, "Expect '(' after 'if'.")
 
-  expression(vm)
+  expression(vm, parser)
 
-  consume(TokenRightParen, "Expect ')' after condition.")
+  consume(parser, TokenRightParen, "Expect ')' after condition.")
 
-  let thenJump = emitJump(vm, OpJumpIfFalse)
+  let thenJump = emitJump(vm, parser, OpJumpIfFalse)
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
-  statement(vm)
+  statement(vm, parser)
 
-  let elseJump = emitJump(vm, OpJump)
+  let elseJump = emitJump(vm, parser, OpJump)
 
-  patchJump(vm, thenJump)
+  patchJump(vm, parser, thenJump)
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
-  if match(TokenElse):
-    statement(vm)
+  if match(parser, TokenElse):
+    statement(vm, parser)
 
-  patchJump(vm, elseJump)
+  patchJump(vm, parser, elseJump)
 
-proc printStatement(vm: var VM) =
-  expression(vm)
+proc printStatement(vm: var VM, parser: var Parser) =
+  expression(vm, parser)
 
-  consume(TokenSemicolon, "Expect ';' after value.")
+  consume(parser, TokenSemicolon, "Expect ';' after value.")
 
-  emitByte(vm, OpPrint)
+  emitByte(vm, parser, OpPrint)
 
-proc returnStatement(vm: var VM) =
+proc returnStatement(vm: var VM, parser: var Parser) =
   if vm.currentCompiler.`type` == TypeScript:
-    error("Can't return from top-level code.")
+    error(parser, "Can't return from top-level code.")
 
-  if match(TokenSemicolon):
-    emitReturn(vm)
+  if match(parser, TokenSemicolon):
+    emitReturn(vm, parser)
   else:
     if vm.currentCompiler.`type` == TypeInitializer:
-      error("Can't return a value from an initializer.")
+      error(parser, "Can't return a value from an initializer.")
 
-    expression(vm)
+    expression(vm, parser)
 
-    consume(TokenSemicolon, "Expect ';' after return value.")
+    consume(parser, TokenSemicolon, "Expect ';' after return value.")
 
-    emitByte(vm, OpReturn)
+    emitByte(vm, parser, OpReturn)
 
-proc whileStatement(vm: var VM) =
+proc whileStatement(vm: var VM, parser: var Parser) =
   let loopStart = currentChunk(vm).count
 
-  consume(TokenLeftParen, "Expect '(' after 'while'.")
+  consume(parser, TokenLeftParen, "Expect '(' after 'while'.")
 
-  expression(vm)
+  expression(vm, parser)
 
-  consume(TokenRightParen, "Expect ')' after condition.")
+  consume(parser, TokenRightParen, "Expect ')' after condition.")
 
-  let exitJump = emitJump(vm, OpJumpIfFalse)
+  let exitJump = emitJump(vm, parser, OpJumpIfFalse)
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
-  statement(vm)
+  statement(vm, parser)
 
-  emitLoop(vm, loopStart)
+  emitLoop(vm, parser, loopStart)
 
-  patchJump(vm, exitJump)
+  patchJump(vm, parser, exitJump)
 
-  emitByte(vm, OpPop)
+  emitByte(vm, parser, OpPop)
 
-proc synchronize() =
+proc synchronize(parser: var Parser) =
   parser.panicMode = false
 
   while parser.current.`type` != TokenEof:
@@ -865,56 +863,58 @@ proc synchronize() =
     else:
       discard
 
-    advance()
+    advance(parser)
 
-proc declaration(vm: var VM) =
-  if match(TokenClass):
-    classDeclaration(vm)
-  elif match(TokenFun):
-    funDeclaration(vm)
-  elif match(TokenVar):
-    varDeclaration(vm)
+proc declaration(vm: var VM, parser: var Parser) =
+  if match(parser, TokenClass):
+    classDeclaration(vm, parser)
+  elif match(parser, TokenFun):
+    funDeclaration(vm, parser)
+  elif match(parser, TokenVar):
+    varDeclaration(vm, parser)
   else:
-    statement(vm)
+    statement(vm, parser)
 
   if parser.panicMode:
-    synchronize()
+    synchronize(parser)
 
-proc statement(vm: var VM) =
-  if match(TokenPrint):
-    printStatement(vm)
-  elif match(TokenFor):
-    forStatement(vm)
-  elif match(TokenIf):
-    ifStatement(vm)
-  elif match(TokenReturn):
-    returnStatement(vm)
-  elif match(TokenWhile):
-    whileStatement(vm)
-  elif match(TokenLeftBrace):
+proc statement(vm: var VM, parser: var Parser) =
+  if match(parser, TokenPrint):
+    printStatement(vm, parser)
+  elif match(parser, TokenFor):
+    forStatement(vm, parser)
+  elif match(parser, TokenIf):
+    ifStatement(vm, parser)
+  elif match(parser, TokenReturn):
+    returnStatement(vm, parser)
+  elif match(parser, TokenWhile):
+    whileStatement(vm, parser)
+  elif match(parser, TokenLeftBrace):
     beginScope(vm)
 
-    `block`(vm)
+    `block`(vm, parser)
 
-    endScope(vm)
+    endScope(vm, parser)
   else:
-    expressionStatement(vm)
+    expressionStatement(vm, parser)
 
 proc compile*(vm: var VM, source: var string): ptr ObjFunction =
   initScanner(source)
 
-  var compiler: Compiler
+  var
+    compiler: Compiler
+    parser: Parser
 
-  initCompiler(vm, compiler, TypeScript)
+  initCompiler(vm, compiler, parser, TypeScript)
 
   parser.hadError = false
   parser.panicMode = false
 
-  advance()
+  advance(parser)
 
-  while not match(TokenEof):
-    declaration(vm)
+  while not match(parser, TokenEof):
+    declaration(vm, parser)
 
-  let function = endCompiler(vm)
+  let function = endCompiler(vm, parser)
 
   return if parser.hadError: nil else: function
