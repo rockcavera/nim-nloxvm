@@ -107,6 +107,7 @@ type
   # compiler.nim
 
   Parser* = object
+    scanner*: Scanner
     current*: Token
     previous*: Token
     rules*: array[40, ParseRule]

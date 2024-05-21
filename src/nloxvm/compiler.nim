@@ -56,7 +56,7 @@ proc advance(parser: var Parser) =
   parser.previous = parser.current
 
   while true:
-    parser.current = scanToken()
+    parser.current = scanToken(parser.scanner)
 
     if parser.current.`type` != TokenError:
       break
@@ -896,14 +896,13 @@ proc statement(vm: var VM, parser: var Parser) =
     expressionStatement(vm, parser)
 
 proc compile*(vm: var VM, source: var string): ptr ObjFunction =
-  initScanner(source)
-
   var
     compiler: Compiler
     parser: Parser
 
   initCompiler(vm, compiler, parser, TypeScript)
 
+  parser.scanner = initScanner(source)
   parser.rules = initRules()
   parser.currentClass = nil
   parser.hadError = false
