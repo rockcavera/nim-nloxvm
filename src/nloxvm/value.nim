@@ -17,10 +17,6 @@ proc writeValueArray*(vm: var VM, `array`: var ValueArray, value: Value) =
   `array`.values[`array`.count] = value
   `array`.count += 1
 
-proc freeValueArray*(vm: var VM, `array`: var ValueArray) =
-  freeArray(vm, Value, `array`.values, `array`.capacity)
-  initValueArray(`array`)
-
 proc valuesEqual*(a: Value, b: Value): bool =
   when nanBoxing:
     if isNumber(a) and isNumber(b):

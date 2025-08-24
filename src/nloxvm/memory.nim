@@ -1,6 +1,6 @@
 import system/ansi_c
 
-import ./types, ./value_helpers
+import ./table2, ./types, ./value_helpers
 
 when defined(debugLogGc):
   import std/strformat
@@ -11,7 +11,6 @@ import ./private/pointer_arithmetics
 
 const gcHeapGrowFactor {.intdefine.} = 2
 
-proc freeChunk(vm: var VM, chunk: var Chunk) {.importc: "freeChunk__nloxvmZchunk_u23".}
 proc collectGarbage*(vm: var VM)
 
 template allocate*[T](vm: var VM, `type`: typedesc[T], count: untyped): ptr T =
@@ -140,7 +139,45 @@ proc blackenObject(vm: var VM, `object`: ptr Obj) =
   of ObjtNative, ObjtString:
     discard
 
-from ./table import freeTable, tableRemoveWhite
+# value.nim
+
+proc freeValueArray(vm: var VM, `array`: var ValueArray) =
+  freeArray(vm, Value, `array`.values, `array`.capacity)
+  # initValueArray(`array`)
+  `array`.values = nil
+  `array`.capacity = 0
+  `array`.count = 0
+
+# end
+
+# chunck.nim
+
+proc freeChunk(vm: var VM, chunk: var Chunk) =
+  freeArray(vm, uint8, chunk.code, chunk.capacity)
+  freeArray(vm, int32, chunk.lines, chunk.capacity)
+  freeValueArray(vm, chunk.constants)
+  # initChunk(chunk)
+  chunk.count = 0
+  chunk.capacity = 0
+  chunk.code = nil
+  chunk.lines = nil
+  # initValueArray(chunk.constants)
+  chunk.constants.values = nil
+  chunk.constants.capacity = 0
+  chunk.constants.count = 0
+
+# end
+
+# table.nim
+
+proc freeTable*(vm: var VM, table: var Table) =
+  freeArray(vm, Entry, table.entries, table.capacity)
+  # initTable(table)
+  table.count = 0
+  table.capacity = 0
+  table.entries = nil
+
+# end
 
 proc freeObject*(vm: var VM, `object`: ptr Obj) =
   when defined(debugLogGc):
@@ -245,6 +282,17 @@ proc sweep(vm: var VM) =
         vm.objects = `object`
 
       freeObject(vm, unreached)
+
+# table.nim
+
+proc tableRemoveWhite(table: var Table) =
+  for i in 0 ..< table.capacity:
+    let entry = addr table.entries[i]
+
+    if not(isNil(entry.key)) and not(entry.key.obj.isMarked):
+      discard tableDelete(table, entry.key)
+
+# end
 
 proc collectGarbage*(vm: var VM) =
   when defined(debugLogGc):

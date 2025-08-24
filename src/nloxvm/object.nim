@@ -1,7 +1,7 @@
 when defined(debugLogGc):
   import std/strformat
 
-import ./chunk, ./memory, ./table, ./types, ./value_helpers
+import ./chunk, ./memory, ./table, ./types, ./value_helpers, ./vm_helpers
 
 import ./private/pointer_arithmetics
 
@@ -57,9 +57,6 @@ proc newInstance*(vm: var VM, klass: ptr ObjClass): ptr ObjInstance =
 proc newNative*(vm: var VM, function: NativeFn): ptr ObjNative =
   result = allocateObj(vm, ObjNative, ObjtNative)
   result.function = function
-
-proc push(vm: var VM, value: Value) {.importc: "push__nloxvmZvm95impl_u4".}
-proc pop(vm: var VM): Value {.importc: "pop__nloxvmZvm95impl_u15".}
 
 proc allocateString(vm: var VM, chars: ptr char, length: int32, hash: uint32): ptr ObjString =
   result = allocateObj(vm, ObjString, ObjtString)

@@ -1,6 +1,6 @@
 import std/[strutils, times]
 
-import ./compiler, ./memory, ./object, ./object_helpers, ./printer, ./table, ./types, ./value, ./value_helpers
+import ./compiler, ./memory, ./object, ./object_helpers, ./printer, ./table, ./types, ./value, ./value_helpers, ./vm_helpers
 
 when defined(debugTraceExecution):
   import ./debug
@@ -50,9 +50,6 @@ proc runtimeError(vm: var VM, format: string, args: varargs[string, `$`]) =
 
   resetStack(vm)
 
-proc push(vm: var VM, value: Value) {.extern: "push__nloxvmZvm95impl_u4".}
-proc pop(vm: var VM): Value {.extern: "pop__nloxvmZvm95impl_u15".}
-
 proc defineNative(vm: var VM, name: cstring, function: NativeFn) =
   push(vm, objVal(copyString(vm, cast[ptr char](name), len(name).int32)))
   push(vm, objVal(newNative(vm, function)))
@@ -90,14 +87,6 @@ proc freeVM*(vm: var VM) =
   vm.initString = nil
 
   freeObjects(vm)
-
-proc push(vm: var VM, value: Value) =
-  vm.stackTop[] = value
-  vm.stackTop += 1
-
-proc pop(vm: var VM): Value =
-  vm.stackTop -= 1
-  return vm.stackTop[]
 
 proc peek(vm: var VM, distance: int32): Value =
   vm.stackTop[-1 - distance]

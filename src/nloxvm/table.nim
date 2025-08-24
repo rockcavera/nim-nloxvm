@@ -1,6 +1,8 @@
-import ./memory, ./types, ./value_helpers
+import ./memory, ./table2, ./types, ./value_helpers
 
 import ./private/pointer_arithmetics
+
+export tableDelete
 
 const tableMaxLoad = 0.75'f32
 
@@ -8,29 +10,6 @@ proc initTable*(table: var Table) =
   table.count = 0
   table.capacity = 0
   table.entries = nil
-
-proc freeTable*(vm: var VM, table: var Table) =
-  freeArray(vm, Entry, table.entries, table.capacity)
-  initTable(table)
-
-proc findEntry(entries: ptr Entry, capacity: int32, key: ptr ObjString): ptr Entry =
-  var
-    index = key.hash and uint32(capacity - 1)
-    tombstone = cast[ptr Entry](nil)
-
-  while true:
-    let entry = entries + index
-
-    if isNil(entry.key):
-      if isNil(entry.value):
-        return if not isNil(tombstone): tombstone else: entry
-      else:
-        if isNil(tombstone):
-          tombstone = entry
-    elif entry.key == key:
-      return entry
-
-    index = (index + 1) and uint32(capacity - 1)
 
 proc tableGet*(table: var Table, key: ptr ObjString, value: var Value): bool =
   if table.count == 0:
@@ -88,20 +67,6 @@ proc tableSet*(vm: var VM, table: var Table, key: ptr ObjString, value: Value): 
   entry.key = key
   entry.value = value
 
-proc tableDelete*(table: var Table, key: ptr ObjString): bool =
-  if table.count == 0:
-    return false
-
-  var entry = findEntry(table.entries, table.capacity, key)
-
-  if isNil(entry.key):
-    return false
-
-  entry.key = nil
-  entry.value = boolVal(true)
-
-  true
-
 proc tableAddAll*(vm: var VM, `from`: var Table, to: var Table) =
   for i in 0 ..< `from`.capacity:
     let entry = `from`.entries + i
@@ -125,10 +90,3 @@ proc tableFindString*(table: var Table, chars: ptr char, length: int32, hash: ui
       return entry.key
 
     index = (index + 1) and uint32(table.capacity - 1)
-
-proc tableRemoveWhite*(table: var Table) =
-  for i in 0 ..< table.capacity:
-    let entry = addr table.entries[i]
-
-    if not(isNil(entry.key)) and not(entry.key.obj.isMarked):
-      discard tableDelete(table, entry.key)
