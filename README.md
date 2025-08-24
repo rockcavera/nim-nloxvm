@@ -10,7 +10,9 @@ I have always been interested in learning how a programming language is implemen
 Nim is currently the programming language I have the best aptitude for and I feel more comfortable exploring something new and unknown. I tried to keep this Nim implementation as faithful as possible with the base implementation made in C.
 
 ### Challenges when using Nim
-The big challenge was trying to keep the project organization (files and code) the same as the book, since refactoring/code reallocation was necessary to avoid cyclical imports. To do this, I had to create some `*_helpers.nim` modules, as well as put all type declarations in `types.nim`. I had to bail myself out to `{.exportc.}` and `{.importc.}` to avoid a major code change.
+The big challenge was avoiding cyclical imports. To do this, it was necessary to relocate and refactor some parts of the code between modules, in addition to creating the modules `*_helpers.nim`, `printer.nim` and `table2.nim`, as well as put all type declarations in `types.nim`. I believe the biggest "culprits" for this were the memory allocators and the garbage collector.
+
+Note: This branch is not a "literal" translation of the C version, as it avoids global variables, keeping the compiler state in a local variable, which is passed between procedures. [Access here](https://github.com/rockcavera/nim-nloxvm/tree/faithful-to-C) the branch that tried to stay more faithful to the C version.
 
 ## Progress
 I. WELCOME
